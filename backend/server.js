@@ -24,6 +24,7 @@ import paymentRoutes from './routes/payments.js';
 import inventoryRoutes from './routes/inventory.js';
 import doshaRoutes from './routes/dosha.js';
 import patientRoutes from './routes/patients.js';
+import patientDashboardRoutes from './routes/patientDashboard.js';
 
 import { auditMiddleware } from './middleware/auditMiddleware.js';
 
@@ -113,6 +114,7 @@ app.get("/api/health", (req, res) => {
 // -------------------- ROUTES --------------------
 app.use("/api/auth", authRoutes);
 app.use("/api/patients", patientRoutes);
+app.use("/api/patient/dashboard", patientDashboardRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/wellness", wellnessRoutes);
 app.use("/api/therapies", therapyRoutes);

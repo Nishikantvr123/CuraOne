@@ -55,7 +55,13 @@ const DashboardRedirect = () => {
 const AppRoutes = () => {
   const { isAuthenticated, isLoading } = useAuth();
   
-  if (isLoading) {
+  // Memoize to prevent unnecessary re-renders
+  const authStatus = React.useMemo(() => ({
+    isAuthenticated,
+    isLoading
+  }), [isAuthenticated, isLoading]);
+  
+  if (authStatus.isLoading) {
     return <Loading />;
   }
   
@@ -63,7 +69,7 @@ const AppRoutes = () => {
     <Routes>
       <Route 
         path="/auth" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <AuthContainer />} 
+        element={authStatus.isAuthenticated ? <Navigate to="/dashboard" replace /> : <AuthContainer />} 
       />
       <Route 
         path="/dashboard" 
@@ -76,7 +82,7 @@ const AppRoutes = () => {
       <Route 
         path="/" 
         element={
-          isAuthenticated ? 
+          authStatus.isAuthenticated ? 
             <Navigate to="/dashboard" replace /> : 
             <Navigate to="/auth" replace />
         } 
@@ -84,7 +90,7 @@ const AppRoutes = () => {
       {/* Catch all route */}
       <Route 
         path="*" 
-        element={<Navigate to={isAuthenticated ? "/dashboard" : "/auth"} replace />} 
+        element={<Navigate to={authStatus.isAuthenticated ? "/dashboard" : "/auth"} replace />} 
       />
     </Routes>
   );

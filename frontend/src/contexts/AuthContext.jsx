@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import authService from '../services/authService.js';
 import socketService from '../services/socketService.js';
+import apiService from '../services/api.js';
 
 const initialState = {
   user: null,
@@ -73,19 +74,28 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const initAuthRef = React.useRef(false);
 
   // Check for existing authentication on app load
   useEffect(() => {
+    // Prevent multiple simultaneous auth checks
+    if (initAuthRef.current) return;
+    initAuthRef.current = true;
+    
     const initAuth = async () => {
-      if (authService.isAuthenticated()) {
+      const isAuth = authService.isAuthenticated();
+      
+      if (isAuth) {
         try {
           // Validate token by fetching user profile
           const user = await authService.getProfile();
+          
           dispatch({ type: 'LOGIN_SUCCESS', payload: user });
           
           // Connect socket for real-time notifications
           socketService.connect(user.id);
         } catch (error) {
+          console.error('Profile fetch failed:', error);
           // Token is invalid, logout user
           await authService.logout();
           dispatch({ type: 'LOGOUT' });
@@ -103,6 +113,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const { user } = await authService.login(email, password);
+      
       dispatch({ type: 'LOGIN_SUCCESS', payload: user });
       
       // Connect socket for real-time notifications
@@ -130,14 +141,22 @@ export const AuthProvider = ({ children }) => {
       // Remove confirmPassword field as backend doesn't need it
       delete transformedData.confirmPassword;
       
-      const { user } = await authService.register(transformedData);
+      // Call register API
+      const { user, token } = await authService.register(transformedData);
+      
       dispatch({ type: 'LOGIN_SUCCESS', payload: user });
       
       // Connect socket for real-time notifications
       socketService.connect(user.id);
+      
+      // Force a complete page reload to ensure fresh state
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 500);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Registration failed';
       dispatch({ type: 'LOGIN_FAILURE', payload: message });
+      throw error;
     }
   };
 

@@ -60,7 +60,7 @@ export const register = async (req, res, next) => {
       }
     };
 
-    const newUser = create('users', userData);
+    const newUser = await create('users', userData);
 
     // Generate token
     const token = generateToken(newUser.id);
@@ -115,7 +115,7 @@ export const login = async (req, res, next) => {
     }
 
     // Update last login
-    update('users', user.id, { lastLogin: new Date().toISOString() });
+    await update('users', user.id, { lastLogin: new Date().toISOString() });
 
     // Generate token
     const token = generateToken(user.id);
@@ -243,7 +243,7 @@ export const changePassword = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     // Update password
-    update('users', req.user.id, {
+    await update('users', req.user.id, {
       password: hashedPassword,
       updatedAt: new Date().toISOString()
     });

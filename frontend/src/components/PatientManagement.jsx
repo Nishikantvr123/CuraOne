@@ -203,14 +203,16 @@ const PatientManagement = () => {
       
       // Check age range
       let matchesAge = true;
-      const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear();
-      
-      if (advancedFilters.ageRange.min && !isNaN(parseInt(advancedFilters.ageRange.min))) {
-        matchesAge = matchesAge && age >= parseInt(advancedFilters.ageRange.min);
-      }
-      
-      if (advancedFilters.ageRange.max && !isNaN(parseInt(advancedFilters.ageRange.max))) {
-        matchesAge = matchesAge && age <= parseInt(advancedFilters.ageRange.max);
+      if (patient.dateOfBirth) {
+        const age = new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear();
+        
+        if (advancedFilters.ageRange.min && !isNaN(parseInt(advancedFilters.ageRange.min))) {
+          matchesAge = matchesAge && age >= parseInt(advancedFilters.ageRange.min);
+        }
+        
+        if (advancedFilters.ageRange.max && !isNaN(parseInt(advancedFilters.ageRange.max))) {
+          matchesAge = matchesAge && age <= parseInt(advancedFilters.ageRange.max);
+        }
       }
       
       // Check last visit date range
@@ -310,6 +312,7 @@ const PatientManagement = () => {
   };
 
   const getAge = (dateOfBirth) => {
+    if (!dateOfBirth) return 'N/A';
     return new Date().getFullYear() - new Date(dateOfBirth).getFullYear();
   };
 
@@ -323,6 +326,7 @@ const PatientManagement = () => {
   };
 
   const getStatusColor = (status) => {
+    if (!status) return 'bg-gray-100 text-gray-800';
     switch (status) {
       case 'active':
         return 'bg-green-100 text-green-800';
@@ -336,6 +340,7 @@ const PatientManagement = () => {
   };
 
   const getConstitutionColor = (constitution) => {
+    if (!constitution) return 'bg-gray-100 text-gray-800';
     switch (constitution) {
       case 'vata':
         return 'bg-blue-100 text-blue-800';
@@ -498,7 +503,7 @@ const PatientManagement = () => {
                         getConstitutionColor(patient.constitution)
                       )}>
                         <Heart className="h-3 w-3 mr-1" />
-                        {patient.constitution}
+                        {patient.constitution || 'Not set'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -520,7 +525,7 @@ const PatientManagement = () => {
                         {patient.status === 'active' && <div className="w-2 h-2 rounded-full bg-green-400 mr-1" />}
                         {patient.status === 'inactive' && <div className="w-2 h-2 rounded-full bg-gray-400 mr-1" />}
                         {patient.status === 'pending' && <div className="w-2 h-2 rounded-full bg-yellow-400 mr-1" />}
-                        {patient.status}
+                        {patient.status || 'pending'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -539,7 +544,7 @@ const PatientManagement = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </button>
-                        {patient.allergies.some(allergy => allergy.severity === 'life-threatening') && (
+                        {patient.allergies?.some(allergy => allergy.severity === 'life-threatening') && (
                           <AlertCircle className="h-4 w-4 text-red-500" title="Critical Allergies" />
                         )}
                       </div>

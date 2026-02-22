@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
   Activity, 
@@ -153,7 +153,75 @@ export const EnhancedPatientDashboard = () => {
   const [wellnessModalOpen, setWellnessModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   
+  // Real data states
+  const [progressMetrics, setProgressMetrics] = useState({
+    completedSessions: 0,
+    totalSessions: 0,
+    progressPercentage: 0,
+    streak: 0,
+    currentProgram: 'Loading...'
+  });
+  const [upcomingSessions, setUpcomingSessions] = useState([]);
+  const [wellnessData, setWellnessData] = useState({
+    energyLevel: 50,
+    sleepQuality: 50,
+    mood: 50,
+    stressLevel: 50
+  });
+  const [progressData, setProgressData] = useState({
+    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Current'],
+    energy: [50, 50, 50, 50, 50, 50, 50],
+    sleep: [50, 50, 50, 50, 50, 50, 50],
+    stress: [50, 50, 50, 50, 50, 50, 50]
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  
   const { user } = useAuth();
+  
+  // Fetch real data on component mount
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true);
+        const dashboardService = (await import('../../services/dashboardService.js')).default;
+        
+        // Fetch all dashboard data with individual error handling
+        try {
+          const progress = await dashboardService.getProgress();
+          setProgressMetrics(progress);
+        } catch (err) {
+          console.error('Error fetching progress:', err);
+        }
+        
+        try {
+          const sessions = await dashboardService.getUpcomingSessions();
+          setUpcomingSessions(sessions);
+        } catch (err) {
+          console.error('Error fetching sessions:', err);
+        }
+        
+        try {
+          const wellness = await dashboardService.getWellnessData();
+          setWellnessData(wellness);
+        } catch (err) {
+          console.error('Error fetching wellness:', err);
+        }
+        
+        try {
+          const wellnessProgress = await dashboardService.getWellnessProgress();
+          setProgressData(wellnessProgress);
+        } catch (err) {
+          console.error('Error fetching wellness progress:', err);
+        }
+      } catch (error) {
+        console.error('Error loading dashboard service:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchDashboardData();
+  }, []);
   
   // Mock therapies and practitioners data
   const availableTherapies = [
@@ -252,71 +320,17 @@ export const EnhancedPatientDashboard = () => {
     }
   };
   
-  // Mock data for charts
-  const progressData = {
-    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Current'],
-    energy: [60, 65, 70, 75, 80, 85, 87],
-    sleep: [55, 62, 68, 72, 76, 78, 82],
-    stress: [80, 75, 70, 65, 55, 45, 35]
-  };
-
+  // Mock data for session and milestone charts (still using mock data for these)
   const sessionData = {
     labels: ['Abhyanga', 'Shirodhara', 'Panchakarma', 'Meditation', 'Yoga Therapy'],
     completed: [8, 6, 4, 10, 7],
     remaining: [2, 4, 6, 2, 3]
   };
 
-  const wellnessData = {
-    labels: ['Energy', 'Sleep Quality', 'Mood', 'Physical Health', 'Mental Clarity'],
-    values: [87, 82, 85, 78, 80]
-  };
-
   const milestoneData = {
     labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 8', 'Week 10'],
     target: [10, 20, 35, 50, 65, 75, 85, 100],
     actual: [12, 25, 38, 52, 68, 78, 85, 92]
-  };
-
-  // Mock upcoming sessions
-  const upcomingSessions = [
-    {
-      id: '1',
-      therapy: 'Abhyanga (Full Body Oil Massage)',
-      date: 'Today',
-      time: '10:00 AM',
-      practitioner: 'Dr. Sarah Smith',
-      duration: 60,
-      location: 'Room 101',
-      status: 'confirmed'
-    },
-    {
-      id: '2',
-      therapy: 'Shirodhara (Oil Pouring Therapy)',
-      date: 'Tomorrow',
-      time: '2:30 PM',
-      practitioner: 'Dr. Sarah Smith',
-      duration: 45,
-      location: 'Room 203',
-      status: 'confirmed'
-    },
-    {
-      id: '3',
-      therapy: 'Panchakarma Consultation',
-      date: 'Oct 20',
-      time: '11:00 AM',
-      practitioner: 'Dr. Raj Patel',
-      duration: 30,
-      location: 'Consultation Room',
-      status: 'pending'
-    }
-  ];
-
-  const progressMetrics = {
-    completedSessions: 35,
-    totalSessions: 50,
-    currentProgram: 'Comprehensive Detox & Rejuvenation',
-    progressPercentage: 70,
-    streak: 12
   };
 
   const renderChart = () => {
@@ -543,10 +557,10 @@ export const EnhancedPatientDashboard = () => {
               <div className="p-6">
                 <div className="space-y-4">
                   {[
-                    { metric: 'Energy Level', value: 87, color: 'emerald' },
-                    { metric: 'Sleep Quality', value: 82, color: 'blue' },
-                    { metric: 'Mood', value: 85, color: 'purple' },
-                    { metric: 'Stress Level', value: 25, color: 'red', inverted: true }
+                    { metric: 'Energy Level', value: wellnessData.energyLevel, color: 'emerald' },
+                    { metric: 'Sleep Quality', value: wellnessData.sleepQuality, color: 'blue' },
+                    { metric: 'Mood', value: wellnessData.mood, color: 'purple' },
+                    { metric: 'Stress Level', value: wellnessData.stressLevel, color: 'red', inverted: true }
                   ].map(({ metric, value, color, inverted }) => (
                     <div key={metric} className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">{metric}</span>
