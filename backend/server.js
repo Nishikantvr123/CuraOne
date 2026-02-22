@@ -32,13 +32,15 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
-// -------------------- FIXED CORS (LAN + localhost) --------------------
+// -------------------- FIXED CORS (LAN + localhost + Netlify) --------------------
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:5000",     // FRONTEND (Vite dev server)
   "http://localhost:5001",
+  "http://localhost:5173",     // Vite default port
   "http://192.168.1.9:5001",   // FRONTEND IP
-  "http://192.168.1.20:5000"  // BACKEND IP
+  "http://192.168.1.20:5000",  // BACKEND IP
+  "https://curaone.netlify.app" // Your Netlify frontend URL
 ];
 
 app.use(
