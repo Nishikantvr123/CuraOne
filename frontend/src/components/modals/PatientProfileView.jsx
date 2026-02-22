@@ -72,8 +72,9 @@ const PatientProfileView = ({ isOpen, onClose }) => {
     setIsLoading(true);
     try {
       const response = await apiService.put('/auth/profile', formData);
-      if (response.success) {
-        updateUser(response.data);
+      if (response.success && response.data && response.data.user) {
+        // Update user context with the returned user data
+        updateUser(response.data.user);
         toast.success('Profile updated successfully!');
         setIsEditing(false);
       }

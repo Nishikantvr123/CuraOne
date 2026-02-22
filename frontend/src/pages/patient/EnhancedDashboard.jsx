@@ -81,6 +81,14 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue', trend, o
 const Header = ({ onProfileClick }) => {
   const { user, logout } = useAuth();
   
+  // Generate display name from firstName and lastName, fallback to name
+  const displayName = user?.firstName && user?.lastName 
+    ? `${user.firstName} ${user.lastName}` 
+    : user?.name || 'User';
+  
+  // Generate avatar URL based on current name - always regenerate, don't cache
+  const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=059669&color=fff&t=${Date.now()}`;
+  
   return (
     <header className="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -98,7 +106,7 @@ const Header = ({ onProfileClick }) => {
             </div>
             <div className="ml-8">
               <h2 className="text-lg font-semibold text-gray-900">Wellness Dashboard</h2>
-              <p className="text-sm text-gray-600">Welcome back, {user?.name}</p>
+              <p className="text-sm text-gray-600">Welcome back, {displayName}</p>
             </div>
           </div>
 
@@ -114,11 +122,11 @@ const Header = ({ onProfileClick }) => {
               >
                 <img
                   className="h-8 w-8 rounded-full border-2 border-white shadow-sm"
-                  src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=059669&color=fff`}
-                  alt={user?.name}
+                  src={avatarUrl}
+                  alt={displayName}
                 />
                 <div className="text-left hidden md:block">
-                  <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                  <p className="text-sm font-semibold text-gray-900">{displayName}</p>
                   <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
                 </div>
               </button>

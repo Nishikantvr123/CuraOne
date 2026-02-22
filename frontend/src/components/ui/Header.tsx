@@ -13,6 +13,20 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
 
+  // Generate display name from firstName and lastName, fallback to name
+  const displayName = React.useMemo(() => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    return user?.name || 'User';
+  }, [user?.firstName, user?.lastName, user?.name, user?.id]); // Added user?.id to force re-render
+
+  // Generate avatar URL based on current name
+  const avatarUrl = React.useMemo(() => {
+    // Always regenerate avatar URL, don't use cached avatar
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0ea5e9&color=fff&t=${Date.now()}`;
+  }, [displayName]);
+
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -62,11 +76,11 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
               >
                 <img
                   className="h-8 w-8 rounded-full"
-                  src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=0ea5e9&color=fff`}
-                  alt={user?.name}
+                  src={avatarUrl}
+                  alt={displayName}
                 />
                 <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium text-gray-900">{user?.name}</p>
+                  <p className="text-sm font-medium text-gray-900">{displayName}</p>
                   <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
                 </div>
               </button>
@@ -75,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
                   <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{user?.name}</p>
+                    <p className="text-sm font-medium text-gray-900">{displayName}</p>
                     <p className="text-sm text-gray-500">{user?.email}</p>
                   </div>
                   

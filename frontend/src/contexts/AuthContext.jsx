@@ -42,9 +42,14 @@ const authReducer = (state, action) => {
         error: null,
       };
     case 'UPDATE_USER':
+      const updatedUser = state.user ? { ...state.user, ...action.payload } : null;
+      // Update localStorage immediately
+      if (updatedUser) {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
       return {
         ...state,
-        user: state.user ? { ...state.user, ...action.payload } : null,
+        user: updatedUser,
       };
     case 'CLEAR_ERROR':
       return {
@@ -148,15 +153,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateUser = async (userData) => {
-    try {
-      const updatedUser = await authService.updateProfile(userData);
-      dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+  const updateUser = (userData) => {
+    if (state.user) {
+      const updatedUser = { ...state.user, ...userData };
+      // Update localStorage first
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      // Then update state
+      dispatch({ type: 'UPDATE_USER', payload: userData });
       return updatedUser;
-    } catch (error) {
-      console.error('Update user error:', error);
-      throw error;
     }
+    return null;
   };
 
   const clearError = () => {

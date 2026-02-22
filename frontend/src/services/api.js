@@ -48,10 +48,18 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      
+      // Check if response has content
+      const contentType = response.headers.get('content-type');
+      let data = null;
+      
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : null;
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        throw new Error(data?.error || data?.message || `HTTP error! status: ${response.status}`);
       }
 
       return data;
