@@ -15,10 +15,10 @@ class SocketService {
       return this.socket;
     }
 
-    // Force correct backend port (your backend = :8000)
-    const protocol = window.location.protocol; // http:// or https://
-    const hostname = window.location.hostname;
-    this.serverUrl = `${protocol}//${hostname}:8000`;
+    // Use the API URL from environment variable, but for socket connection
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+    // Remove '/api' suffix to get the base URL for socket connection
+    this.serverUrl = apiUrl.replace('/api', '');
 
     console.log("Connecting to Socket.IO server:", this.serverUrl);
 
