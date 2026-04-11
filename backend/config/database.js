@@ -43,12 +43,16 @@ const buildFilter = (query = {}) => {
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined) continue;
     if (key === 'id') {
-      // Try to cast to ObjectId; fall back to string for string _ids
-      try {
-        filter._id = mongoose.Types.ObjectId.isValid(value)
-          ? new mongoose.Types.ObjectId(value)
-          : value;
-      } catch {
+      // Try ObjectId first, if invalid keep as string
+      if (mongoose.Types.ObjectId.isValid(value)) {
+        console.log('🔧 buildFilter: id is valid ObjectId format:', value);
+        // Use $or to match either ObjectId or string version
+        filter.$or = [
+          { _id: new mongoose.Types.ObjectId(value) },
+          { _id: value.toString() }
+        ];
+      } else {
+        console.log('🔧 buildFilter: id is NOT valid ObjectId format:', value);
         filter._id = value;
       }
     } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -73,13 +77,13 @@ const toPlain = (doc) => {
 
 export const findOne = (collection, query = {}) => {
   const filter = buildFilter(query);
-  console.log('🔍 findOne filter:', JSON.stringify(filter)); // ← ADD
+  console.log('🔍 findOne collection:', collection, 'query:', JSON.stringify(query), 'filter:', JSON.stringify(filter));
   
   return getModel(collection)
     .findOne(filter)
     .lean()
     .then((doc) => {
-      console.log('📄 findOne result:', doc ? 'FOUND' : 'NOT FOUND'); // ← ADD
+      console.log('📄 findOne result:', doc ? `FOUND (email: ${doc.email || 'N/A'})` : 'NOT FOUND');
       if (!doc) return null;
       const obj = { ...doc };
       obj.id = String(obj._id);
@@ -120,14 +124,22 @@ export const insertOne = async (collection, data) => {
 
 export const updateOne = async (collection, query, update) => {
   const filter = buildFilter(query);
-  const doc = await getModel(collection).findOneAndUpdate(
-    filter,
-    { $set: { ...update, updatedAt: new Date() } },
-    { new: true, upsert: false }
-  );
-  return toPlain(doc);
-};
 
+  // Step 1 — perform the update
+  const result = await getModel(collection).updateOne(
+    filter,
+    { $set: { ...update, updatedAt: new Date() } }
+  );
+
+  console.log('🔄 updateOne matched:', result.matchedCount, 'modified:', result.modifiedCount);
+
+  // Step 2 — fetch using same filter
+  const updated = await getModel(collection).findOne(filter).lean();
+
+  console.log('🔄 updateOne fetched:', updated ? updated.email || 'FOUND' : 'NULL');
+
+  return toPlain(updated);
+};
 export const deleteOne = async (collection, query) => {
   const result = await getModel(collection).deleteOne(buildFilter(query));
   return result.deletedCount > 0;
@@ -161,3 +173,5 @@ export default {
   aggregate,
   findByCondition,
 };
+// Export getModel so controllers can use the same model instance
+export { getModel };

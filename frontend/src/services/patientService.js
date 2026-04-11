@@ -8,6 +8,11 @@ class PatientService {
     return await apiService.get(endpoint);
   }
 
+  // Get registered users not yet added to dashboard
+  async getRegisteredUsers() {
+    return await apiService.get('/patients/registered');
+  }
+
   // Get patient by ID
   async getPatientById(id) {
     return await apiService.get(`/patients/${id}`);

@@ -153,19 +153,13 @@ const PatientProfileModal = ({
       };
 
       await onSave(profileData);
-      
-      toast.success(
-        isCreating 
-          ? 'Patient profile created successfully!'
-          : 'Patient profile updated successfully!'
-      );
       onClose();
     } catch (error) {
-      toast.error(
-        isCreating 
+      toast.error(error.message || (
+        isCreating
           ? 'Failed to create patient profile. Please try again.'
           : 'Failed to update patient profile. Please try again.'
-      );
+      ));
     } finally {
       setIsLoading(false);
     }
