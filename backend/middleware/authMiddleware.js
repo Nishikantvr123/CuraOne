@@ -11,7 +11,9 @@ export const protect = async (req, res, next) => {
   try {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('🔑 Token decoded ID:', decoded.id);
     const user = await findOne('users', { id: decoded.id });
+     console.log('👤 Found user:', user ? user.email : 'NULL');
 
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, error: 'Not authorized - user not found or inactive' });

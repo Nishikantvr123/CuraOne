@@ -236,9 +236,11 @@ const PatientManagement = () => {
   };
 
   const handleSavePatient = async (patientData) => {
+     console.log('Saving patient data:', patientData);
     try {
       if (modalMode === 'create') {
         const response = await patientService.createPatient(patientData);
+        console.log('Response from server:', response.data);
         if (response.success) {
           setPatients(prev => [...prev, response.data]);
           setFilteredPatients(prev => [...prev, response.data]);

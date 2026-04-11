@@ -45,8 +45,8 @@ const BookingForm = ({ onSuccess, onCancel }) => {
     },
     {
       id: 'practitioner-2', 
-      firstName: 'Dr. Michael',
-      lastName: 'Johnson',
+      firstName: 'Dr. Raj',
+      lastName: 'Patel',
       specialization: ['Detox', 'Wellness']
     }
   ];

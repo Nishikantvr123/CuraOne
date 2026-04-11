@@ -15,9 +15,9 @@ const getModel = (collection) => {
   if (modelCache[collection]) return modelCache[collection];
 
   const schema = new mongoose.Schema(
-    { _id: { type: String, default: () => new mongoose.Types.ObjectId().toString() } },
-    { strict: false, timestamps: true, collection }
-  );
+  {},
+  { strict: false, timestamps: true, collection }
+);
 
   modelCache[collection] = mongoose.model(collection, schema);
   return modelCache[collection];
@@ -72,13 +72,14 @@ const toPlain = (doc) => {
 // ─── CRUD API (mirrors old in-memory DB exports) ──────────────────────────────
 
 export const findOne = (collection, query = {}) => {
-  // Synchronous-looking but returns a Promise – controllers already await or
-  // the result is used synchronously in some places.  We return a thenable
-  // so both patterns work.
+  const filter = buildFilter(query);
+  console.log('🔍 findOne filter:', JSON.stringify(filter)); // ← ADD
+  
   return getModel(collection)
-    .findOne(buildFilter(query))
+    .findOne(filter)
     .lean()
     .then((doc) => {
+      console.log('📄 findOne result:', doc ? 'FOUND' : 'NOT FOUND'); // ← ADD
       if (!doc) return null;
       const obj = { ...doc };
       obj.id = String(obj._id);
@@ -86,7 +87,6 @@ export const findOne = (collection, query = {}) => {
       return obj;
     });
 };
-
 export const findMany = (collection, query = {}, options = {}) => {
   let q = getModel(collection).find(buildFilter(query));
 
