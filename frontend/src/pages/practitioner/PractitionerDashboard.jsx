@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import bookingService from '../../services/bookingService';
 import { NotificationBell, NotificationProvider } from '../../components/notifications/NotificationSystem';
+import ThemeToggle from '../../components/ui/ThemeToggle';
 
 const PractitionerDashboard = () => {
   const { user, logout } = useAuth();
@@ -436,9 +437,9 @@ const PractitionerDashboard = () => {
 
   return (
     <NotificationProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Header */}
-      <header className="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-40">
+      <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -453,27 +454,28 @@ const PractitionerDashboard = () => {
                 </div>
               </div>
               <div className="ml-8">
-                <h2 className="text-lg font-semibold text-gray-900">Practitioner Dashboard</h2>
-                <p className="text-sm text-gray-600">Welcome back, {user?.firstName || user?.name || 'Doctor'}</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Practitioner Dashboard</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Welcome back, {user?.firstName || user?.name || 'Doctor'}</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
+              <ThemeToggle />
               <NotificationBell />
 
-              <div className="flex items-center space-x-3 bg-gray-50 rounded-full px-3 py-2">
-                <div className="h-8 w-8 rounded-full border-2 border-white shadow-sm bg-gradient-to-r from-emerald-500 to-blue-500 flex items-center justify-center">
+              <div className="flex items-center space-x-3 bg-gray-50 dark:bg-gray-700 rounded-full px-3 py-2 transition-colors">
+                <div className="h-8 w-8 rounded-full border-2 border-white dark:border-gray-600 shadow-sm bg-gradient-to-r from-emerald-500 to-blue-500 flex items-center justify-center">
                   <span className="text-white font-medium text-sm">
                     {(user?.firstName?.[0] || user?.name?.[0] || 'D').toUpperCase()}
                   </span>
                 </div>
                 <div className="text-left hidden md:block">
-                  <p className="text-sm font-semibold text-gray-900">{user?.firstName || user?.name || 'Doctor'}</p>
-                  <p className="text-xs text-gray-600 capitalize">{user?.role || 'practitioner'}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{user?.firstName || user?.name || 'Doctor'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">{user?.role || 'practitioner'}</p>
                 </div>
                 <button
                   onClick={logout}
-                  className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-full hover:bg-red-50"
+                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
                   title="Sign out"
                 >
                   <LogOut className="h-5 w-5" />
@@ -485,7 +487,7 @@ const PractitionerDashboard = () => {
       </header>
 
       {/* Navigation Tabs */}
-      <div className="bg-white border-b">
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
             {tabs.map((tab) => {

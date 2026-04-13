@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthContainer } from './components/auth/AuthContainer';
 import { EnhancedPatientDashboard } from './pages/patient/EnhancedDashboard';
@@ -99,18 +100,20 @@ const AppRoutes = () => {
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <RealtimeProvider>
-          <NotificationProvider>
-            <Router>
-              <div className="min-h-screen bg-gray-50">
-                <AppRoutes />
-                <ChatWidgetWrapper />
-              </div>
-            </Router>
-          </NotificationProvider>
-        </RealtimeProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RealtimeProvider>
+            <NotificationProvider>
+              <Router>
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+                  <AppRoutes />
+                  <ChatWidgetWrapper />
+                </div>
+              </Router>
+            </NotificationProvider>
+          </RealtimeProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
