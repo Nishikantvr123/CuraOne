@@ -86,19 +86,26 @@ export const AuthProvider = ({ children }) => {
       const isAuth = authService.isAuthenticated();
       
       if (isAuth) {
+        // Use cached user immediately so the app doesn't hang
+        const cachedUser = authService.getCurrentUser();
+        if (cachedUser) {
+          dispatch({ type: 'LOGIN_SUCCESS', payload: cachedUser });
+          socketService.connect(cachedUser.id);
+        }
+
         try {
-          // Validate token by fetching user profile
+          // Validate token by fetching user profile in background
           const user = await authService.getProfile();
-          
           dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-          
-          // Connect socket for real-time notifications
-          socketService.connect(user.id);
         } catch (error) {
           console.error('Profile fetch failed:', error);
-          // Token is invalid, logout user
-          await authService.logout();
-          dispatch({ type: 'LOGOUT' });
+          const isTimeout = error.message?.includes('timed out');
+          if (!isTimeout) {
+            // Token is invalid (not just a network issue), logout user
+            await authService.logout();
+            dispatch({ type: 'LOGOUT' });
+          }
+          // If it's a timeout/network error, keep the cached user logged in
         }
       } else {
         dispatch({ type: 'LOGOUT' });
@@ -119,8 +126,9 @@ export const AuthProvider = ({ children }) => {
       // Connect socket for real-time notifications
       socketService.connect(user.id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
+      const message = error instanceof Error ? error.message : 'Login failed. Please check your connection and try again.';
       dispatch({ type: 'LOGIN_FAILURE', payload: message });
+      throw error; // re-throw so callers can handle it
     }
   };
 

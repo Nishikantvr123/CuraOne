@@ -46,8 +46,14 @@ class ApiService {
       },
     };
 
+    // Abort controller for timeout (30 seconds — allows for Render cold start)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    config.signal = controller.signal;
+
     try {
       const response = await fetch(url, config);
+      clearTimeout(timeoutId);
       
       // Check if response has content
       const contentType = response.headers.get('content-type');
@@ -64,6 +70,10 @@ class ApiService {
 
       return data;
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out. Please check your connection.');
+      }
       console.error('API request failed:', error);
       throw error;
     }

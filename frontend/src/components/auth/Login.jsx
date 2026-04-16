@@ -10,6 +10,7 @@ const cn = (...classes) => classes.filter(Boolean).join(' ');
 export const Login = ({ onToggleMode }) => {
   const { login, isLoading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [wakingUp, setWakingUp] = useState(false);
   
   const {
     register,
@@ -18,7 +19,15 @@ export const Login = ({ onToggleMode }) => {
   } = useForm();
 
   const onSubmit = async (data) => {
-    await login(data.email, data.password);
+    setWakingUp(false);
+    try {
+      await login(data.email, data.password);
+    } catch (err) {
+      // If network error, likely Render cold start — show retry hint
+      if (err?.message?.includes('fetch') || err?.message?.includes('network') || err?.message?.includes('timed out')) {
+        setWakingUp(true);
+      }
+    }
   };
 
   return (
@@ -112,7 +121,21 @@ export const Login = ({ onToggleMode }) => {
                 <div className="flex-shrink-0 w-5 h-5 rounded-full bg-red-100 flex items-center justify-center mt-0.5">
                   <span className="text-red-600 text-xs font-bold">!</span>
                 </div>
-                <p className="text-red-700 text-sm">{error}</p>
+                <div>
+                  <p className="text-red-700 text-sm">{error}</p>
+                  {(error.includes('fetch') || error.includes('network') || error.includes('timed out') || error.includes('ERR_')) && (
+                    <p className="text-red-600 text-xs mt-1">The server may be waking up (free tier). Please wait 30 seconds and try again.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {wakingUp && !error && (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center mt-0.5">
+                  <span className="text-amber-600 text-xs font-bold">⏳</span>
+                </div>
+                <p className="text-amber-700 text-sm">Server is waking up, please wait a moment and try again...</p>
               </div>
             )}
 
