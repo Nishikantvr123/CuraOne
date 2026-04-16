@@ -231,7 +231,7 @@ export const EnhancedPatientDashboard = () => {
             const bookings = bookingsResponse.data.bookings.filter(b => {
               if (!b || !b.status || !b.scheduledDate) return false;
               if (hiddenBookings.includes(b.id)) return false;
-              const validStatuses = ['scheduled', 'confirmed', 'cancelled'];
+              const validStatuses = ['pending', 'scheduled', 'confirmed', 'cancelled'];
               return validStatuses.includes(b.status) && new Date(b.scheduledDate) >= new Date();
             });
             
@@ -347,10 +347,23 @@ export const EnhancedPatientDashboard = () => {
         try {
           const bookingsResponse = await apiService.get('/bookings/my-bookings');
           if (bookingsResponse.success && bookingsResponse.data?.bookings) {
-            const upcoming = bookingsResponse.data.bookings.filter(b => 
-              b && b.status && (b.status === 'scheduled' || b.status === 'confirmed') &&
+            const filteredBookings = bookingsResponse.data.bookings.filter(b => 
+              b && b.status && (b.status === 'pending' || b.status === 'scheduled' || b.status === 'confirmed') &&
               b.scheduledDate && new Date(b.scheduledDate) >= new Date()
             );
+            
+            // Transform bookings to match UI expectations
+            const upcoming = filteredBookings.map(b => ({
+              id: b.id,
+              therapy: b.therapy?.name || 'Unknown Therapy',
+              practitioner: b.practitioner ? `${b.practitioner.firstName} ${b.practitioner.lastName}` : 'Unknown Practitioner',
+              date: b.scheduledDate,
+              time: b.scheduledTime,
+              duration: b.duration || 60,
+              location: 'CuraOne Wellness Center',
+              status: b.status
+            }));
+            
             setUpcomingSessions(upcoming);
           }
         } catch (fetchError) {
@@ -724,8 +737,8 @@ export const EnhancedPatientDashboard = () => {
                         </div>
                       </div>
                       <div className="ml-4 flex-1">
-                        <h3 className="text-base font-semibold text-gray-900">{session.therapy}</h3>
-                        <p className="text-sm text-gray-600">with {session.practitioner}</p>
+                        <h3 className="text-base font-semibold text-gray-900">{session.therapy?.name || session.therapy}</h3>
+                        <p className="text-sm text-gray-600">with {session.practitioner?.firstName ? `${session.practitioner.firstName} ${session.practitioner.lastName}` : session.practitioner}</p>
                         <div className="flex items-center space-x-4 mt-1">
                           <span className="text-sm font-medium text-gray-700">
                             {session.date} at {session.time}

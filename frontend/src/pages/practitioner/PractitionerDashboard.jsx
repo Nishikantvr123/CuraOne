@@ -89,21 +89,21 @@ const PractitionerDashboard = () => {
 
   const loadTodayBookings = async () => {
     const today = new Date().toISOString().split('T')[0];
-    // Filter bookings for today
-    const todaysBookings = bookings.filter(booking => booking.scheduledDate === today);
+    // Filter bookings for today with null checks
+    const todaysBookings = bookings.filter(booking => booking && booking.scheduledDate === today);
     setTodayBookings(todaysBookings);
   };
 
   const loadStats = async () => {
-    // Calculate stats from real bookings
+    // Calculate stats from real bookings with null checks
     const today = new Date().toISOString().split('T')[0];
     const thisWeek = new Date();
     thisWeek.setDate(thisWeek.getDate() + 7);
     
-    const todayCount = bookings.filter(b => b.scheduledDate === today).length;
-    const weekCount = bookings.filter(b => new Date(b.scheduledDate) <= thisWeek).length;
-    const pendingCount = bookings.filter(b => b.status === 'pending' || b.status === 'scheduled').length;
-    const completedCount = bookings.filter(b => b.status === 'completed').length;
+    const todayCount = bookings.filter(b => b && b.scheduledDate === today).length;
+    const weekCount = bookings.filter(b => b && b.scheduledDate && new Date(b.scheduledDate) <= thisWeek).length;
+    const pendingCount = bookings.filter(b => b && (b.status === 'pending' || b.status === 'scheduled')).length;
+    const completedCount = bookings.filter(b => b && b.status === 'completed').length;
     
     setStats({
       todayAppointments: todayCount,
@@ -247,16 +247,16 @@ const PractitionerDashboard = () => {
                 <div key={booking.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-4">
                     <img
-                      src={booking.patient.avatar}
-                      alt={`${booking.patient.firstName} ${booking.patient.lastName}`}
+                      src={booking.patient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(booking.patient?.firstName || 'User')}`}
+                      alt={`${booking.patient?.firstName || ''} ${booking.patient?.lastName || ''}`}
                       className="w-10 h-10 rounded-full"
                     />
                     <div>
                       <h4 className="text-sm font-medium text-gray-900">
-                        {booking.patient.firstName} {booking.patient.lastName}
+                        {booking.patient?.firstName} {booking.patient?.lastName}
                       </h4>
                       <p className="text-sm text-gray-500">
-                        {booking.therapy.name} • {booking.scheduledTime} • {booking.duration}min
+                        {booking.therapy?.name} • {booking.scheduledTime} • {booking.duration}min
                       </p>
                       {booking.notes && (
                         <p className="text-xs text-gray-400 mt-1">{booking.notes}</p>
@@ -362,25 +362,25 @@ const PractitionerDashboard = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {bookings.map((booking) => (
+            {bookings.filter(booking => booking && booking.patient).map((booking) => (
               <tr key={booking.id}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <img
                       className="h-8 w-8 rounded-full"
-                      src={booking.patient.avatar}
+                      src={booking.patient?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(booking.patient?.firstName || 'User')}`}
                       alt=""
                     />
                     <div className="ml-3">
                       <div className="text-sm font-medium text-gray-900">
-                        {booking.patient.firstName} {booking.patient.lastName}
+                        {booking.patient?.firstName} {booking.patient?.lastName}
                       </div>
-                      <div className="text-sm text-gray-500">{booking.patient.email}</div>
+                      <div className="text-sm text-gray-500">{booking.patient?.email}</div>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{booking.therapy.name}</div>
+                  <div className="text-sm text-gray-900">{booking.therapy?.name || 'N/A'}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">
