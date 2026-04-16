@@ -42,10 +42,11 @@ export const createBooking = async (req, res, next) => {
       throw new Error('Practitioner not found');
     }
 
-    // Check for conflicts (simplified - in real app would check detailed scheduling)
+    // Check for conflicts - check if same practitioner, date, AND time
     const existingBooking = await findOne('bookings', {
       practitionerId: bookingData.practitionerId,
       scheduledDate: bookingData.preferredDate,
+      scheduledTime: bookingData.preferredTime,
       status: { $in: ['scheduled', 'confirmed'] }
     });
 

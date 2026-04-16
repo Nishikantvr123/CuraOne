@@ -39,6 +39,54 @@ const demoUsers = [
   },
   {
     _id: new mongoose.Types.ObjectId().toString(),
+    firstName: 'Dr. Raj',
+    lastName: 'Patel',
+    email: 'raj.patel@curaone.com',
+    role: 'practitioner',
+    phone: '+1-555-0126',
+    specialization: ['Detox Therapy', 'Wellness Counseling', 'Yoga Therapy'],
+    experience: 10,
+    isActive: true,
+    avatar: 'https://ui-avatars.com/api/?name=Dr+Raj+Patel&background=0891b2&color=fff',
+  },
+  {
+    _id: new mongoose.Types.ObjectId().toString(),
+    firstName: 'Dr. Maya',
+    lastName: 'Sharma',
+    email: 'maya.sharma@curaone.com',
+    role: 'practitioner',
+    phone: '+1-555-0127',
+    specialization: ['Shirodhara', 'Abhyanga', 'Marma Therapy'],
+    experience: 6,
+    isActive: true,
+    avatar: 'https://ui-avatars.com/api/?name=Dr+Maya+Sharma&background=8b5cf6&color=fff',
+  },
+  {
+    _id: new mongoose.Types.ObjectId().toString(),
+    firstName: 'Dr. Aman',
+    lastName: 'Verma',
+    email: 'aman.verma@curaone.com',
+    role: 'practitioner',
+    phone: '+1-555-0128',
+    specialization: ['Nasya', 'Basti', 'Virechana'],
+    experience: 12,
+    isActive: true,
+    avatar: 'https://ui-avatars.com/api/?name=Dr+Aman+Verma&background=ec4899&color=fff',
+  },
+  {
+    _id: new mongoose.Types.ObjectId().toString(),
+    firstName: 'Dr. Priya',
+    lastName: 'Reddy',
+    email: 'priya.reddy@curaone.com',
+    role: 'practitioner',
+    phone: '+1-555-0129',
+    specialization: ['Herbal Medicine', 'Diet Consultation', 'Lifestyle Counseling'],
+    experience: 5,
+    isActive: true,
+    avatar: 'https://ui-avatars.com/api/?name=Dr+Priya+Reddy&background=f59e0b&color=fff',
+  },
+  {
+    _id: new mongoose.Types.ObjectId().toString(),
     firstName: 'Admin',
     lastName: 'User',
     email: 'admin@curaone.com',
@@ -68,8 +116,15 @@ async function seed() {
     }
 
     console.log('\n🎉 Seed complete! Demo credentials:');
+    console.log('\n📋 PATIENT ACCOUNT:');
     console.log('   patient@curaone.com / password123');
-    console.log('   practitioner@curaone.com / password123');
+    console.log('\n👨‍⚕️ PRACTITIONER ACCOUNTS:');
+    console.log('   practitioner@curaone.com / password123 (Dr. Sarah Smith)');
+    console.log('   raj.patel@curaone.com / password123 (Dr. Raj Patel)');
+    console.log('   maya.sharma@curaone.com / password123 (Dr. Maya Sharma)');
+    console.log('   aman.verma@curaone.com / password123 (Dr. Aman Verma)');
+    console.log('   priya.reddy@curaone.com / password123 (Dr. Priya Reddy)');
+    console.log('\n👑 ADMIN ACCOUNT:');
     console.log('   admin@curaone.com / password123');
   } catch (err) {
     console.error('❌ Seed failed:', err.message);

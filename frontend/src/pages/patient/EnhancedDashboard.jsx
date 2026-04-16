@@ -13,9 +13,12 @@ import {
   Target,
   Award,
   Zap,
-  User
+  User,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import apiService from '../../services/api';
 import {
   ProgressLineChart,
   SessionProgressChart,
@@ -79,7 +82,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue', trend, o
   </div>
 );
 
-const Header = ({ onProfileClick }) => {
+const Header = ({ onProfileClick, onDeleteAccount }) => {
   const { user, logout } = useAuth();
   
   // Generate display name from firstName and lastName, fallback to name
@@ -139,6 +142,13 @@ const Header = ({ onProfileClick }) => {
               >
                 <LogOut className="h-5 w-5" />
               </button>
+              <button
+                onClick={onDeleteAccount}
+                className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                title="Delete Account"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -154,6 +164,12 @@ export const EnhancedPatientDashboard = () => {
   const [bookingModalMode, setBookingModalMode] = useState('create');
   const [wellnessModalOpen, setWellnessModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [availablePractitioners, setAvailablePractitioners] = useState([]);
+  const [availableTherapies, setAvailableTherapies] = useState([]);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
   
   // Real data states
   const [progressMetrics, setProgressMetrics] = useState({
@@ -196,10 +212,42 @@ export const EnhancedPatientDashboard = () => {
         }
         
         try {
-          const sessions = await dashboardService.getUpcomingSessions();
-          setUpcomingSessions(sessions);
+          // Fetch real bookings instead of mock sessions
+          const bookingsResponse = await apiService.get('/bookings/my-bookings');
+          console.log('📦 Raw bookings response:', bookingsResponse);
+          
+          if (bookingsResponse.success && bookingsResponse.data?.bookings) {
+            console.log('📋 All bookings:', bookingsResponse.data.bookings);
+            
+            // Filter for upcoming bookings with null checks
+            const hiddenBookings = JSON.parse(localStorage.getItem('hiddenBookings') || '[]');
+            const bookings = bookingsResponse.data.bookings.filter(b => {
+              if (!b || !b.status || !b.scheduledDate) return false;
+              if (hiddenBookings.includes(b.id)) return false;
+              const validStatuses = ['scheduled', 'confirmed', 'cancelled'];
+              return validStatuses.includes(b.status) && new Date(b.scheduledDate) >= new Date();
+            });
+            
+            console.log('✅ Filtered bookings:', bookings);
+            
+            // Transform bookings to match UI expectations
+            const upcoming = bookings.map(b => ({
+              id: b.id,
+              therapy: b.therapy?.name || 'Unknown Therapy',
+              practitioner: b.practitioner ? `${b.practitioner.firstName} ${b.practitioner.lastName}` : 'Unknown Practitioner',
+              date: b.scheduledDate,
+              time: b.scheduledTime,
+              duration: b.duration || 60,
+              location: 'CuraOne Wellness Center',
+              status: b.status
+            }));
+            
+            console.log('✅ Loaded upcoming sessions:', upcoming);
+            setUpcomingSessions(upcoming);
+          }
         } catch (err) {
           console.error('Error fetching sessions:', err);
+          setUpcomingSessions([]);
         }
         
         try {
@@ -210,12 +258,11 @@ export const EnhancedPatientDashboard = () => {
         }
         
         try {
-          const wellnessProgress = await dashboardService.getWellnessProgress();
-          setProgressData(wellnessProgress);
+          // Always load from real check-in history
+          await refreshWellnessChart();
         } catch (err) {
           console.error('Error fetching wellness progress:', err);
-        }
-      } catch (error) {
+        }      } catch (error) {
         console.error('Error loading dashboard service:', error);
       } finally {
         setIsLoading(false);
@@ -225,65 +272,45 @@ export const EnhancedPatientDashboard = () => {
     fetchDashboardData();
   }, []);
   
-  // Mock therapies and practitioners data
-  const availableTherapies = [
-    {
-      id: '1',
-      name: 'Abhyanga (Full Body Oil Massage)',
-      price: 120,
-      duration: 60,
-      category: 'massage',
-      description: 'Traditional Ayurvedic full-body oil massage'
-    },
-    {
-      id: '2', 
-      name: 'Shirodhara (Oil Pouring Therapy)',
-      price: 150,
-      duration: 45,
-      category: 'rejuvenation',
-      description: 'Continuous stream of warm oil on the forehead'
-    },
-    {
-      id: '3',
-      name: 'Panchakarma Consultation', 
-      price: 80,
-      duration: 30,
-      category: 'consultation',
-      description: 'Comprehensive consultation for detox program'
-    },
-    {
-      id: '4',
-      name: 'Swedana (Steam Therapy)',
-      price: 90,
-      duration: 30,
-      category: 'detox',
-      description: 'Herbal steam therapy for detoxification'
-    }
-  ];
+  // Fetch practitioners from API
+  useEffect(() => {
+    const fetchPractitioners = async () => {
+      try {
+        const response = await apiService.get('/practitioners');
+        if (response.success) {
+          const practitioners = response.data.practitioners.map(p => ({
+            ...p,
+            name: `${p.firstName} ${p.lastName}`
+          }));
+          console.log('✅ Loaded practitioners:', practitioners);
+          setAvailablePractitioners(practitioners);
+        }
+      } catch (error) {
+        console.error('❌ Error loading practitioners:', error);
+        setAvailablePractitioners([]);
+      }
+    };
+    
+    fetchPractitioners();
+  }, []);
 
-  const availablePractitioners = [
-    {
-      id: '1',
-      firstName: 'Dr. Sarah',
-      lastName: 'Smith',
-      name: 'Dr. Sarah Smith',
-      specialization: 'Panchakarma Specialist'
-    },
-    {
-      id: '2', 
-      firstName: 'Dr. Raj',
-      lastName: 'Patel',
-      name: 'Dr. Raj Patel',
-      specialization: 'Ayurvedic Physician'
-    },
-    {
-      id: '3',
-      firstName: 'Dr. Maya',
-      lastName: 'Sharma',
-      name: 'Dr. Maya Sharma',
-      specialization: 'Massage Therapist'
-    }
-  ];
+  // Fetch therapies from API
+  useEffect(() => {
+    const fetchTherapies = async () => {
+      try {
+        const response = await apiService.get('/therapies');
+        if (response.success) {
+          console.log('✅ Loaded therapies:', response.data.therapies);
+          setAvailableTherapies(response.data.therapies);
+        }
+      } catch (error) {
+        console.error('❌ Error loading therapies:', error);
+        setAvailableTherapies([]);
+      }
+    };
+    
+    fetchTherapies();
+  }, []);
 
   // Booking handlers
   const handleBookSession = () => {
@@ -294,14 +321,88 @@ export const EnhancedPatientDashboard = () => {
 
   const handleSaveBooking = async (bookingData) => {
     try {
-      // In a real app, this would save to the backend
       console.log('Saving booking:', bookingData);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setBookingModalOpen(false);
+      
+      // Create booking via API
+      const response = await apiService.post('/bookings', {
+        therapyId: bookingData.therapy?.id,
+        practitionerId: bookingData.practitioner?.id,
+        preferredDate: bookingData.scheduledDate,
+        preferredTime: bookingData.scheduledTime,
+        duration: bookingData.duration,
+        notes: bookingData.notes || ''
+      });
+      
+      if (response.success) {
+        console.log('✅ Booking created:', response.data?.booking);
+        
+        // Refresh upcoming sessions
+        try {
+          const bookingsResponse = await apiService.get('/bookings/my-bookings');
+          if (bookingsResponse.success && bookingsResponse.data?.bookings) {
+            const upcoming = bookingsResponse.data.bookings.filter(b => 
+              b && b.status && (b.status === 'scheduled' || b.status === 'confirmed') &&
+              b.scheduledDate && new Date(b.scheduledDate) >= new Date()
+            );
+            setUpcomingSessions(upcoming);
+          }
+        } catch (fetchError) {
+          console.error('Error fetching updated bookings:', fetchError);
+          // Don't throw - booking was created successfully
+        }
+        
+        setBookingModalOpen(false);
+      }
     } catch (error) {
       console.error('Error saving booking:', error);
       throw error;
+    }
+  };
+
+  const handleCancelBooking = async (sessionId) => {
+    const session = upcomingSessions.find(s => s.id === sessionId);
+    const isCancelled = session?.status === 'cancelled';
+    
+    const confirmMsg = isCancelled 
+      ? 'Remove this rejected booking from your list?' 
+      : 'Are you sure you want to cancel this booking?';
+    
+    if (!window.confirm(confirmMsg)) return;
+    
+    try {
+      if (!isCancelled) {
+        await apiService.put(`/bookings/${sessionId}/cancel`, { reason: 'Cancelled by patient' });
+      }
+      // Store hidden booking IDs in localStorage so they don't reappear
+      const hidden = JSON.parse(localStorage.getItem('hiddenBookings') || '[]');
+      if (!hidden.includes(sessionId)) {
+        hidden.push(sessionId);
+        localStorage.setItem('hiddenBookings', JSON.stringify(hidden));
+      }
+      setUpcomingSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      alert('Failed to cancel booking. Please try again.');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      setDeleteError('Please enter your password');
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      const response = await apiService.delete('/auth/delete-account', { password: deletePassword });
+      if (response.success) {
+        localStorage.clear();
+        logout();
+      }
+    } catch (error) {
+      setDeleteError(error.message || 'Failed to delete account. Check your password.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -311,14 +412,102 @@ export const EnhancedPatientDashboard = () => {
 
   const handleSaveWellness = async (wellnessData) => {
     try {
-      // In a real app, this would save to the backend
-      console.log('Saving wellness data:', wellnessData);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Helper: convert 0-100 slider to 1-10 integer
+      const toScale = (v) => Math.max(1, Math.min(10, Math.round(Number(v) / 10)));
+      
+      const metrics = [
+        { type: 'energy', value: toScale(wellnessData.energyLevel) },
+        { type: 'sleep',  value: toScale(wellnessData.sleepQuality) },
+        { type: 'mood',   value: toScale(wellnessData.moodLevel) },
+        { type: 'stress', value: toScale(wellnessData.stressLevel) }
+      ];
+      
+      const payload = {
+        metrics,
+        energyLevel: toScale(wellnessData.energyLevel),
+        stressLevel: toScale(wellnessData.stressLevel),
+        sleepHours: wellnessData.sleepHours || 7,
+        mood: wellnessData.moodLevel >= 70 ? 'good' : wellnessData.moodLevel >= 40 ? 'neutral' : 'poor',
+        notes: wellnessData.notes || ''
+      };
+      
+      // Check if today's check-in exists
+      const historyRes = await apiService.get('/wellness/history?limit=7');
+      const todayCheckIn = historyRes.data?.checkIns?.find(c => c.date === today);
+      
+      if (todayCheckIn) {
+        await apiService.put(`/wellness/checkin/${todayCheckIn.id}`, payload);
+      } else {
+        await apiService.post('/wellness/checkin', payload);
+      }
+      
+      // Update today's wellness display
+      setWellnessData({
+        energyLevel: wellnessData.energyLevel,
+        sleepQuality: wellnessData.sleepQuality,
+        mood: wellnessData.moodLevel,
+        stressLevel: wellnessData.stressLevel
+      });
+      
+      // Refresh chart with updated data
+      await refreshWellnessChart();
+      
       setWellnessModalOpen(false);
     } catch (error) {
       console.error('Error saving wellness data:', error);
       throw error;
+    }
+  };
+
+  // Refresh wellness chart from real check-in history
+  const refreshWellnessChart = async () => {
+    try {
+      const response = await apiService.get('/wellness/history?limit=42');
+      if (!response.success || !response.data?.checkIns?.length) {
+        // No check-in data yet - keep default 50% flat line
+        return;
+      }
+      
+      const checkIns = response.data.checkIns.sort((a, b) => new Date(a.date) - new Date(b.date));
+      const now = new Date();
+      
+      // Group by week (0 = current week, 1 = last week, etc.)
+      const weeklyData = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
+      
+      checkIns.forEach(c => {
+        const date = new Date(c.date);
+        const daysAgo = Math.floor((now - date) / (24 * 60 * 60 * 1000));
+        const weekNum = Math.floor(daysAgo / 7);
+        if (weekNum >= 0 && weekNum <= 5) {
+          weeklyData[weekNum].push(c);
+        }
+      });
+      
+      const avg = (arr, field) => {
+        const vals = arr.map(c => {
+          if (field === 'energy') return (c.energyLevel || 0) * 10;
+          if (field === 'sleep') return c.sleepQuality || 50;
+          if (field === 'stress') return (c.stressLevel || 0) * 10;
+          return 50;
+        }).filter(v => v > 0);
+        return vals.length > 0 ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 50;
+      };
+      
+      // Labels: Week 6 (oldest) to Current (newest)
+      const labels = ['Week 6', 'Week 5', 'Week 4', 'Week 3', 'Week 2', 'Week 1', 'Current'];
+      const weekMap = [5, 4, 3, 2, 1, 0]; // maps label index to weeklyData key
+      
+      setProgressData({
+        labels,
+        energy: [...weekMap.map(w => avg(weeklyData[w], 'energy')), avg(weeklyData[0], 'energy')],
+        sleep:  [...weekMap.map(w => avg(weeklyData[w], 'sleep')),  avg(weeklyData[0], 'sleep')],
+        stress: [...weekMap.map(w => avg(weeklyData[w], 'stress')), avg(weeklyData[0], 'stress')]
+      });
+      
+    } catch (err) {
+      console.error('Error refreshing wellness chart:', err);
     }
   };
   
@@ -352,7 +541,57 @@ export const EnhancedPatientDashboard = () => {
 
   return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
-      <Header onProfileClick={() => setProfileModalOpen(true)} />
+      <Header onProfileClick={() => setProfileModalOpen(true)} onDeleteAccount={() => setDeleteAccountOpen(true)} />
+      
+      {/* Delete Account Modal */}
+      {deleteAccountOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Account</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-4">
+              Your account, bookings, and all data will be permanently deleted. 
+              Enter your password to confirm.
+            </p>
+            
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={deletePassword}
+              onChange={e => { setDeletePassword(e.target.value); setDeleteError(''); }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            
+            {deleteError && (
+              <p className="text-sm text-red-600 mb-3">{deleteError}</p>
+            )}
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteAccountOpen(false); setDeletePassword(''); setDeleteError(''); }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete My Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Enhanced Stats Cards */}
@@ -451,7 +690,14 @@ export const EnhancedPatientDashboard = () => {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {upcomingSessions.map((session, index) => (
+                  {upcomingSessions.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500 font-medium">No upcoming sessions</p>
+                      <p className="text-sm text-gray-400 mt-1">Book a session to get started</p>
+                    </div>
+                  ) : (
+                    upcomingSessions.map((session, index) => (
                     <div 
                       key={session.id} 
                       className={cn(
@@ -483,16 +729,32 @@ export const EnhancedPatientDashboard = () => {
                           <span className="text-sm text-gray-500">{session.location}</span>
                         </div>
                       </div>
-                      <div className="ml-4">
+                      <div className="ml-4 flex items-center gap-2">
                         <span className={cn(
                           "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold",
-                          session.status === 'confirmed' ? "bg-emerald-100 text-emerald-800" : "bg-yellow-100 text-yellow-800"
+                          session.status === 'confirmed' ? "bg-emerald-100 text-emerald-800" : 
+                          session.status === 'cancelled' ? "bg-red-100 text-red-800" :
+                          session.status === 'completed' ? "bg-gray-100 text-gray-800" :
+                          "bg-yellow-100 text-yellow-800"
                         )}>
-                          {session.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                          {session.status === 'confirmed' ? '✓ Confirmed' : 
+                           session.status === 'cancelled' ? '✗ Rejected' :
+                           session.status === 'completed' ? 'Completed' :
+                           'Pending'}
                         </span>
+                        {session.status !== 'completed' && (
+                        <button
+                          onClick={() => handleCancelBooking(session.id)}
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Remove booking"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </div>
             </div>

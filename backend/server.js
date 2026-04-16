@@ -26,6 +26,7 @@ import doshaRoutes from './routes/dosha.js';
 import patientRoutes from './routes/patients.js';
 import patientDashboardRoutes from './routes/patientDashboard.js';
 import adminRoutes from './routes/admin.js';
+import practitionerRoutes from './routes/practitioners.js';
 
 import { auditMiddleware } from './middleware/auditMiddleware.js';
 
@@ -108,6 +109,7 @@ app.use("/api/patient/dashboard", patientDashboardRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/wellness", wellnessRoutes);
 app.use("/api/therapies", therapyRoutes);
+app.use("/api/practitioners", practitionerRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/audit", auditRoutes);

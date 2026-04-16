@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { findOne } from '../config/database.js';
+import { findOne, getModel } from '../config/database.js';
+import mongoose from 'mongoose';
 
 // Protect routes - require authentication
 export const protect = async (req, res, next) => {
@@ -12,8 +13,40 @@ export const protect = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('🔑 Token decoded ID:', decoded.id);
-    const user = await findOne('users', { id: decoded.id });
-     console.log('👤 Found user:', user ? user.email : 'NULL');
+    
+    // Try finding by id field first, then by _id as fallback
+    let user = await findOne('users', { id: decoded.id });
+    
+    // If not found by id field, the user might not have id field set yet
+    // Auto-fix: update the user's id field
+    if (!user) {
+      console.log('⚠️  User not found by id field, trying _id lookup...');
+      const UserModel = getModel('users');
+      
+      let rawUser = null;
+      // Try as ObjectId
+      if (mongoose.Types.ObjectId.isValid(decoded.id)) {
+        rawUser = await UserModel.findById(decoded.id).lean();
+      }
+      // Try as string _id
+      if (!rawUser) {
+        rawUser = await UserModel.findOne({ _id: decoded.id }).lean();
+      }
+      
+      if (rawUser) {
+        // Auto-fix: set the id field
+        await UserModel.updateOne(
+          { _id: rawUser._id },
+          { $set: { id: rawUser._id.toString(), isActive: true } }
+        );
+        console.log('✅ Auto-fixed id field for user:', rawUser.email);
+        
+        // Now fetch again
+        user = await findOne('users', { id: decoded.id });
+      }
+    }
+    
+    console.log('👤 Found user:', user ? user.email : 'NULL');
 
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, error: 'Not authorized - user not found or inactive' });

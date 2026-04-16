@@ -24,82 +24,47 @@ export const useNotifications = () => {
   return context;
 };
 
-// Mock notification data
-const mockNotifications = [
-  {
-    id: '1',
-    type: 'appointment',
-    title: 'Upcoming Session Reminder',
-    message: 'Your Abhyanga session is scheduled for today at 10:00 AM',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    read: false,
-    priority: 'high',
-    actionUrl: '/sessions',
-    icon: Calendar,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50'
-  },
-  {
-    id: '2',
-    type: 'reminder',
-    title: 'Daily Wellness Check-in',
-    message: 'Don\'t forget to log your daily wellness metrics',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    read: false,
-    priority: 'medium',
-    actionUrl: '/wellness',
-    icon: Heart,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-50'
-  },
-  {
-    id: '3',
-    type: 'alert',
-    title: 'Session Feedback Pending',
-    message: 'Please provide feedback for your last Shirodhara session',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6), // 6 hours ago
-    read: true,
-    priority: 'medium',
-    actionUrl: '/feedback',
-    icon: MessageCircle,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-50'
-  },
-  {
-    id: '4',
-    type: 'update',
-    title: 'Treatment Plan Updated',
-    message: 'Dr. Sarah Smith has updated your treatment plan. Review the changes.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    read: true,
-    priority: 'low',
-    actionUrl: '/treatment-plan',
-    icon: Info,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50'
-  },
-  {
-    id: '5',
-    type: 'appointment',
-    title: 'Session Confirmation Required',
-    message: 'Please confirm your Panchakarma session scheduled for Oct 20',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48), // 2 days ago
-    read: false,
-    priority: 'high',
-    actionUrl: '/sessions/confirm',
-    icon: AlertCircle,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50'
-  }
-];
-
 // Notification Provider Component
 export const NotificationProvider = ({ children }) => {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
 
+  // Fetch real notifications from API
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        const r = await fetch('/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const d = await r.json();
+        if (d.success && d.data?.notifications) {
+          // Transform API notifications to UI format
+          const mapped = d.data.notifications.map(n => ({
+            id: n.id,
+            type: n.type || 'appointment',
+            title: n.title,
+            message: n.message,
+            timestamp: new Date(n.createdAt || n.timestamp || Date.now()),
+            read: n.isRead || false,
+            priority: n.priority || 'normal',
+            icon: Calendar,
+            color: 'text-blue-600',
+            bgColor: 'bg-blue-50'
+          }));
+          setNotifications(mapped);
+        }
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+        setNotifications([]);
+      }
+    };
+    fetchNotifications();
+  }, []);
+
   // Mark notification as read
-  const markAsRead = (notificationId) => {
+  const markAsRead = async (notificationId) => {
     setNotifications(prev => 
       prev.map(notification => 
         notification.id === notificationId 
@@ -107,20 +72,53 @@ export const NotificationProvider = ({ children }) => {
           : notification
       )
     );
+    // Persist to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
   };
 
   // Mark all notifications as read
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     setNotifications(prev => 
       prev.map(notification => ({ ...notification, read: true }))
     );
+    // Persist to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch('/api/notifications/mark-all-read', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Error marking all as read:', err);
+    }
   };
 
   // Remove notification
-  const removeNotification = (notificationId) => {
+  const removeNotification = async (notificationId) => {
+    console.log('🗑️ Deleting notification:', notificationId);
     setNotifications(prev => 
       prev.filter(notification => notification.id !== notificationId)
     );
+    // Persist delete to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`/api/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      console.log('🗑️ Delete response:', data);
+    } catch (err) {
+      console.error('Error deleting notification:', err);
+    }
   };
 
   // Add new notification

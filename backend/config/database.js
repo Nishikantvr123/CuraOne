@@ -27,12 +27,14 @@ const getModel = (collection) => {
 export const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 3000,
+      connectTimeoutMS: 3000,
     });
     console.log(`✅ MongoDB Atlas connected: ${conn.connection.host}`);
     return true;
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
+    console.error('💡 Check your internet connection and MongoDB Atlas network access');
     process.exit(1);
   }
 };
@@ -43,18 +45,10 @@ const buildFilter = (query = {}) => {
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined) continue;
     if (key === 'id') {
-      // Try ObjectId first, if invalid keep as string
-      if (mongoose.Types.ObjectId.isValid(value)) {
-        console.log('🔧 buildFilter: id is valid ObjectId format:', value);
-        // Use $or to match either ObjectId or string version
-        filter.$or = [
-          { _id: new mongoose.Types.ObjectId(value) },
-          { _id: value.toString() }
-        ];
-      } else {
-        console.log('🔧 buildFilter: id is NOT valid ObjectId format:', value);
-        filter._id = value;
-      }
+      // Query by the 'id' field directly (not _id)
+      // Since _id is stored as string in this database, we use the 'id' field
+      console.log('🔧 buildFilter: querying by id field:', value);
+      filter.id = value.toString();
     } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       filter[key] = value;
     } else {
@@ -117,7 +111,7 @@ export const insertOne = async (collection, data) => {
     ? (mongoose.Types.ObjectId.isValid(data.id) ? new mongoose.Types.ObjectId(data.id) : data.id)
     : new mongoose.Types.ObjectId();
   const { id: _ignored, ...rest } = data;
-  const doc = new Model({ _id: id, ...rest });
+  const doc = new Model({ _id: id, id: id.toString(), ...rest });
   const saved = await doc.save();
   return toPlain(saved);
 };

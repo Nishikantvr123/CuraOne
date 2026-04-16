@@ -307,7 +307,7 @@ const BookingModal = ({
                 <option value="">Select a therapy...</option>
                 {availableTherapies.map((therapy) => (
                   <option key={therapy.id} value={therapy.id}>
-                    {therapy.name} - ${therapy.price} ({therapy.duration}min)
+                    {therapy.name} - ₹{therapy.price} ({therapy.duration}min)
                   </option>
                 ))}
               </select>
@@ -471,7 +471,7 @@ const BookingModal = ({
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Price:</span>
                 <span className="text-sm font-medium">
-                  ${selectedTherapy.price}
+                  ₹{selectedTherapy.price}
                 </span>
               </div>
               {selectedPractitioner && (

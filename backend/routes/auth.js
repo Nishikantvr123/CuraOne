@@ -8,7 +8,8 @@ import {
   logout,
   refreshToken,
   sendOtp,
-  verifyOtp
+  verifyOtp,
+  deleteAccount
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -28,5 +29,6 @@ router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
 router.post('/change-password', changePassword);
 router.post('/logout', logout);
+router.delete('/delete-account', deleteAccount);
 
 export default router;

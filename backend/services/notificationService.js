@@ -52,16 +52,26 @@ export const sendBulkNotifications = async (recipientIds, notificationData) => {
 export const getUserNotifications = async (userId, options = {}) => {
   const { limit = 20, page = 1, unreadOnly = false, type = null } = options;
 
-  let query = { recipientId: userId };
+  // Use mongoose directly to get all notifications for this user
+  const { getModel } = await import('../config/database.js');
+  const Model = getModel('notifications');
+  
+  let query = { recipientId: userId, isDeleted: { $ne: true } };
   if (unreadOnly) query.isRead = false;
   if (type) query.type = type;
 
-  const allNotifications = (await find('notifications', query))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const allDocs = await Model.find(query).sort({ createdAt: -1 }).lean();
+  
+  // Ensure all docs have id field
+  const allNotifications = allDocs.map(doc => ({
+    ...doc,
+    id: doc.id || doc._id.toString(),
+    _id: undefined
+  }));
 
   const startIndex = (page - 1) * limit;
   const notifications = allNotifications.slice(startIndex, startIndex + limit);
-  const unreadCount = (await find('notifications', { recipientId: userId, isRead: false })).length;
+  const unreadCount = allNotifications.filter(n => !n.isRead).length;
 
   return {
     notifications,
@@ -76,13 +86,22 @@ export const getUserNotifications = async (userId, options = {}) => {
 };
 
 export const markAsRead = async (notificationId, userId) => {
-  const notifications = await find('notifications', { id: notificationId, recipientId: userId });
+  // Try by id field first, then by _id
+  let notifications = await find('notifications', { id: notificationId, recipientId: userId });
+  if (!notifications.length) {
+    // Fallback: find by _id directly using mongoose
+    const { getModel } = await import('../config/database.js');
+    const Model = getModel('notifications');
+    const doc = await Model.findById(notificationId).lean();
+    if (doc && doc.recipientId === userId) {
+      await Model.updateOne({ _id: notificationId }, { $set: { id: notificationId, isRead: true, readAt: new Date().toISOString() } });
+      return { ...doc, id: notificationId, isRead: true };
+    }
+    throw new Error('Notification not found');
+  }
   const notification = notifications[0];
-
-  if (!notification) throw new Error('Notification not found');
-
   if (!notification.isRead) {
-    return update('notifications', notificationId, {
+    return update('notifications', notification.id, {
       isRead: true,
       readAt: new Date().toISOString()
     });
@@ -94,7 +113,6 @@ export const markAllAsRead = async (userId) => {
   const unreadNotifications = await find('notifications', { recipientId: userId, isRead: false });
   const readAt = new Date().toISOString();
   const results = [];
-
   for (const notification of unreadNotifications) {
     const updated = await update('notifications', notification.id, { isRead: true, readAt });
     results.push(updated);
@@ -103,12 +121,26 @@ export const markAllAsRead = async (userId) => {
 };
 
 export const deleteNotification = async (notificationId, userId) => {
-  const notifications = await find('notifications', { id: notificationId, recipientId: userId });
+  // Try by id field first
+  let notifications = await find('notifications', { id: notificationId, recipientId: userId });
+  
+  if (!notifications.length) {
+    // Fallback: find by _id directly using mongoose
+    const { getModel } = await import('../config/database.js');
+    const Model = getModel('notifications');
+    const doc = await Model.findById(notificationId).lean();
+    if (doc && doc.recipientId === userId) {
+      await Model.updateOne(
+        { _id: notificationId },
+        { $set: { id: notificationId, isDeleted: true, deletedAt: new Date().toISOString() } }
+      );
+      return { success: true };
+    }
+    throw new Error('Notification not found');
+  }
+  
   const notification = notifications[0];
-
-  if (!notification) throw new Error('Notification not found');
-
-  return update('notifications', notificationId, {
+  return update('notifications', notification.id, {
     isDeleted: true,
     deletedAt: new Date().toISOString()
   });

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { findOne, create, update } from '../config/database.js';
+import { findOne, create, update, updateOne } from '../config/database.js';
 import { generateToken } from '../middleware/authMiddleware.js';
 import { validateEmail, validatePassword, sanitizeInput } from '../utils/validation.js';
 
@@ -95,6 +95,8 @@ export const login = async (req, res, next) => {
 
     // Check for user
     const user = await findOne('users', { email: email.toLowerCase() });
+    console.log('🔍 Login attempt for:', email.toLowerCase());
+    console.log('📋 User found:', user ? `${user.email} (active: ${user.isActive}, hasPassword: ${!!user.password})` : 'NOT FOUND');
 
     if (!user) {
       res.status(401);
@@ -108,20 +110,33 @@ export const login = async (req, res, next) => {
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log('🔐 Password match:', isMatch);
 
     if (!isMatch) {
       res.status(401);
       throw new Error('Invalid credentials');
     }
 
-    // Update last login
-    await update('users', user.id, { lastLogin: new Date().toISOString() });
+    // Ensure user has id field - use email-based update
+    const userId = user.id || user._id?.toString();
+    
+    try {
+      await updateOne('users', { email: user.email }, { 
+        lastLogin: new Date().toISOString(),
+        id: userId,
+        isActive: true
+      });
+    } catch (updateErr) {
+      console.error('⚠️ Failed to update lastLogin (non-fatal):', updateErr.message);
+      // Continue login even if update fails
+    }
 
-    // Generate token
-    const token = generateToken(user.id);
+    // Generate token using the resolved userId
+    const token = generateToken(userId);
 
     // Remove password from response
     const { password: _, ...userResponse } = user;
+    userResponse.id = userId;
 
     res.json({
       success: true,
@@ -132,11 +147,10 @@ export const login = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('❌ LOGIN ERROR:', error.message, error.stack);
     next(error);
   }
 };
-
-// @desc    Get user profile
 // @route   GET /api/auth/profile
 // @access  Private
 export const getProfile = async (req, res, next) => {
@@ -262,13 +276,51 @@ export const changePassword = async (req, res, next) => {
 // @access  Private
 export const logout = async (req, res, next) => {
   try {
-    // In a real JWT implementation, you might want to blacklist the token
-    // For now, we'll just return a success response
-    // The client should remove the token from storage
-
     res.json({
       success: true,
       message: 'Logout successful'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete user account permanently
+// @route   DELETE /api/auth/delete-account
+// @access  Private
+export const deleteAccount = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      res.status(400);
+      throw new Error('Please provide your password to confirm account deletion');
+    }
+
+    // Get user with password
+    const user = await findOne('users', { id: req.user.id });
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      res.status(400);
+      throw new Error('Incorrect password. Account deletion cancelled.');
+    }
+
+    // Delete the user from database
+    const { getModel } = await import('../config/database.js');
+    const UserModel = getModel('users');
+    await UserModel.deleteOne({ email: user.email });
+
+    console.log(`🗑️ Account deleted: ${user.email} (${user.role})`);
+
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
     });
   } catch (error) {
     next(error);

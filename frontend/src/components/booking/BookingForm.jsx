@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Calendar, Clock, User, AlertCircle } from 'lucide-react';
 import therapyService from '../../services/therapyService.js';
 import bookingService from '../../services/bookingService.js';
+import apiService from '../../services/api.js';
 import { useFormSubmit, useDataFetching } from '../../hooks/useAsyncOperation.js';
 import LoadingSpinner, { CardLoader, FormSkeleton } from '../../components/ui/LoadingSpinner.jsx';
 import { SimpleErrorFallback } from '../../components/ErrorBoundary.jsx';
@@ -35,21 +36,34 @@ const BookingForm = ({ onSuccess, onCancel }) => {
     }
   );
 
-  // Mock practitioners - in real app would use data fetching hook
-  const practitioners = [
+  // Load practitioners using data fetching hook
+  const {
+    data: practitioners = [],
+    loading: practitionersLoading,
+    error: practitionersError,
+    refetch: refetchPractitioners
+  } = useDataFetching(
+    () => apiService.get('/practitioners').then(response => {
+      const practitionersList = response.data?.practitioners || [];
+      console.log('📋 Fetched practitioners from API:', practitionersList.length, practitionersList);
+      return practitionersList;
+    }),
+    [],
     {
-      id: 'practitioner-1',
-      firstName: 'Dr. Sarah',
-      lastName: 'Smith',
-      specialization: ['Panchakarma', 'Ayurvedic Massage']
-    },
-    {
-      id: 'practitioner-2', 
-      firstName: 'Dr. Raj',
-      lastName: 'Patel',
-      specialization: ['Detox', 'Wellness']
+      onError: (error) => {
+        console.error('❌ Error loading practitioners:', error);
+        console.error('Error details:', error.response || error.message);
+      }
     }
-  ];
+  );
+
+  // Debug: Log practitioners when they change
+  useEffect(() => {
+    console.log('👥 Practitioners state updated:', practitioners.length);
+    practitioners.forEach((p, i) => {
+      console.log(`  ${i + 1}. ${p.firstName} ${p.lastName} (${p.email})`);
+    });
+  }, [practitioners]);
 
   // Form submission hook
   const { handleSubmit: submitForm, submitting, error: submitError } = useFormSubmit(
@@ -109,15 +123,16 @@ const BookingForm = ({ onSuccess, onCancel }) => {
   };
 
   const selectedTherapyDetails = therapies.find(t => t.id === selectedTherapy);
-  const combinedError = therapiesError || submitError;
+  const combinedError = therapiesError || practitionersError || submitError;
+  const combinedLoading = therapiesLoading || practitionersLoading;
 
-  // Show loading skeleton while therapies are loading
-  if (therapiesLoading) {
+  // Show loading skeleton while therapies or practitioners are loading
+  if (combinedLoading) {
     return (
       <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Book a Therapy Session</h2>
-          <p className="text-gray-600">Loading therapy options...</p>
+          <p className="text-gray-600">Loading booking options...</p>
         </div>
         <FormSkeleton fields={6} />
       </div>
@@ -139,6 +154,9 @@ const BookingForm = ({ onSuccess, onCancel }) => {
             if (therapiesError) {
               refetchTherapies();
             }
+            if (practitionersError) {
+              refetchPractitioners();
+            }
           }}
         />
       )}
@@ -156,7 +174,7 @@ const BookingForm = ({ onSuccess, onCancel }) => {
             <option value="">Choose a therapy...</option>
             {therapies.map(therapy => (
               <option key={therapy.id} value={therapy.id}>
-                {therapy.name} - ${therapy.price} ({therapy.duration}min)
+                {therapy.name} - ₹{therapy.price} ({therapy.duration}min)
               </option>
             ))}
           </select>
@@ -172,7 +190,7 @@ const BookingForm = ({ onSuccess, onCancel }) => {
             <p className="text-sm text-emerald-800 mb-2">{selectedTherapyDetails.description}</p>
             <div className="flex flex-wrap gap-4 text-sm text-emerald-700">
               <span>Duration: {selectedTherapyDetails.duration} minutes</span>
-              <span>Price: ${selectedTherapyDetails.price}</span>
+              <span>Price: ₹{selectedTherapyDetails.price}</span>
               <span>Category: {selectedTherapyDetails.category}</span>
             </div>
           </div>
@@ -188,9 +206,12 @@ const BookingForm = ({ onSuccess, onCancel }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
           >
             <option value="">Choose a practitioner...</option>
-            {practitioners.map(practitioner => (
+            {practitioners.filter(p => p.isActive).map(practitioner => (
               <option key={practitioner.id} value={practitioner.id}>
                 {practitioner.firstName} {practitioner.lastName}
+                {practitioner.specialization && practitioner.specialization.length > 0 
+                  ? ` - ${practitioner.specialization.join(', ')}` 
+                  : ''}
               </option>
             ))}
           </select>
@@ -301,7 +322,7 @@ const BookingForm = ({ onSuccess, onCancel }) => {
           </button>
           <button
             type="submit"
-            disabled={submitting || therapiesLoading}
+            disabled={submitting || combinedLoading}
             className="px-6 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {submitting ? (

@@ -21,10 +21,12 @@ import {
   Eye,
   Edit,
   LogOut,
-  Leaf
+  Leaf,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import bookingService from '../../services/bookingService';
+import apiService from '../../services/api';
 import { NotificationBell, NotificationProvider } from '../../components/notifications/NotificationSystem';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 
@@ -43,6 +45,10 @@ const PractitionerDashboard = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -51,11 +57,8 @@ const PractitionerDashboard = () => {
   const loadDashboardData = async () => {
     setIsLoading(true);
     try {
-      await Promise.all([
-        loadBookings(),
-        loadStats(),
-        loadTodayBookings()
-      ]);
+      await loadBookings();
+      // Load stats and today's bookings after bookings are loaded
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -63,61 +66,20 @@ const PractitionerDashboard = () => {
     }
   };
 
+  // Update stats and today's bookings when bookings change
+  useEffect(() => {
+    loadStats();
+    loadTodayBookings();
+  }, [bookings]);
+
   const loadBookings = async () => {
     try {
-      // Mock bookings - in real app would fetch from API
-      setBookings([
-        {
-          id: '1',
-          patient: { 
-            firstName: 'Rahul', 
-            lastName: 'Sharma', 
-            email: 'rahul.sharma@example.com',
-            phone: '+91-98765-43210',
-            avatar: 'https://ui-avatars.com/api/?name=Rahul+Sharma&background=059669&color=fff'
-          },
-          therapy: { name: 'Abhyanga', duration: 60 },
-          scheduledDate: '2024-01-20',
-          scheduledTime: '10:00',
-          status: 'confirmed',
-          notes: 'First time patient, mild back pain',
-          duration: 60
-        },
-        {
-          id: '2',
-          patient: { 
-            firstName: 'Priya', 
-            lastName: 'Patel',
-            email: 'priya.patel@example.com',
-            phone: '+91-91234-56789',
-            avatar: 'https://ui-avatars.com/api/?name=Priya+Patel&background=0284c7&color=fff'
-          },
-          therapy: { name: 'Shirodhara', duration: 45 },
-          scheduledDate: '2024-01-20',
-          scheduledTime: '14:30',
-          status: 'pending',
-          notes: 'Regular patient, stress management',
-          duration: 45
-        },
-        {
-          id: '3',
-          patient: { 
-            firstName: 'Arjun', 
-            lastName: 'Singh',
-            email: 'arjun.singh@example.com',
-            phone: '+91-99887-76655',
-            avatar: 'https://ui-avatars.com/api/?name=Arjun+Singh&background=7c3aed&color=fff'
-          },
-          therapy: { name: 'Panchakarma', duration: 90 },
-          scheduledDate: '2024-01-21',
-          scheduledTime: '09:00',
-          status: 'completed',
-          notes: 'Complete detox program - week 2',
-          duration: 90
-        }
-      ]);
+      // Fetch real bookings from API
+      const response = await bookingService.getMyBookings();
+      setBookings(response.bookings || []);
     } catch (error) {
       console.error('Error loading bookings:', error);
+      setBookings([]);
     }
   };
 
@@ -129,21 +91,43 @@ const PractitionerDashboard = () => {
   };
 
   const loadStats = async () => {
-    // Mock stats - in real app would come from API
+    // Calculate stats from real bookings
+    const today = new Date().toISOString().split('T')[0];
+    const thisWeek = new Date();
+    thisWeek.setDate(thisWeek.getDate() + 7);
+    
+    const todayCount = bookings.filter(b => b.scheduledDate === today).length;
+    const weekCount = bookings.filter(b => new Date(b.scheduledDate) <= thisWeek).length;
+    const pendingCount = bookings.filter(b => b.status === 'pending' || b.status === 'scheduled').length;
+    const completedCount = bookings.filter(b => b.status === 'completed').length;
+    
     setStats({
-      todayAppointments: 3,
-      thisWeekAppointments: 12,
-      pendingBookings: 2,
-      completedSessions: 45,
+      todayAppointments: todayCount,
+      thisWeekAppointments: weekCount,
+      pendingBookings: pendingCount,
+      completedSessions: completedCount,
       averageRating: 4.8,
-      totalPatients: 28
+      totalPatients: new Set(bookings.map(b => b.patientId)).size
     });
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) { setDeleteError('Please enter your password'); return; }
+    setDeleteLoading(true); setDeleteError('');
+    try {
+      const response = await apiService.delete('/auth/delete-account', { password: deletePassword });
+      if (response.success) { localStorage.clear(); logout(); }
+    } catch (error) {
+      setDeleteError(error.message || 'Failed to delete account. Check your password.');
+    } finally { setDeleteLoading(false); }
   };
 
   const handleBookingAction = async (bookingId, action) => {
     try {
       if (action === 'confirm') {
         await bookingService.confirmBooking(bookingId);
+      } else if (action === 'reject') {
+        await bookingService.cancelBooking(bookingId, 'Rejected by practitioner');
       } else if (action === 'complete') {
         await bookingService.updateBooking(bookingId, { status: 'completed' });
       }
@@ -174,6 +158,7 @@ const PractitionerDashboard = () => {
   const getStatusBadge = (status) => {
     const colors = {
       pending: 'bg-yellow-100 text-yellow-800',
+      scheduled: 'bg-yellow-100 text-yellow-800',
       confirmed: 'bg-blue-100 text-blue-800',
       'in-progress': 'bg-purple-100 text-purple-800',
       completed: 'bg-green-100 text-green-800',
@@ -183,7 +168,7 @@ const PractitionerDashboard = () => {
 
     return (
       <span className={`px-2 py-1 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100 text-gray-800'}`}>
-        {status.replace('-', ' ')}
+        {status === 'scheduled' ? 'Pending' : status.replace('-', ' ')}
       </span>
     );
   };
@@ -277,12 +262,24 @@ const PractitionerDashboard = () => {
                   <div className="flex items-center space-x-3">
                     {getStatusBadge(booking.status)}
                     <div className="flex space-x-2">
-                      {booking.status === 'pending' && (
+                      {(booking.status === 'pending' || booking.status === 'scheduled') && (
                         <button
                           onClick={() => handleBookingAction(booking.id, 'confirm')}
                           className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
                         >
                           Confirm
+                        </button>
+                      )}
+                      {(booking.status === 'pending' || booking.status === 'scheduled') && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Reject this booking?')) {
+                              handleBookingAction(booking.id, 'reject');
+                            }
+                          }}
+                          className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                        >
+                          Reject
                         </button>
                       )}
                       {booking.status === 'confirmed' && (
@@ -400,12 +397,26 @@ const PractitionerDashboard = () => {
                   <button className="text-yellow-600 hover:text-yellow-900">
                     <Edit className="w-4 h-4" />
                   </button>
-                  {booking.status === 'pending' && (
+                  {(booking.status === 'pending' || booking.status === 'scheduled') && (
                     <button
                       onClick={() => handleBookingAction(booking.id, 'confirm')}
                       className="text-green-600 hover:text-green-900"
+                      title="Confirm booking"
                     >
                       <CheckCircle className="w-4 h-4" />
+                    </button>
+                  )}
+                  {(booking.status === 'pending' || booking.status === 'scheduled') && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Reject this booking?')) {
+                          handleBookingAction(booking.id, 'reject');
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-900"
+                      title="Reject booking"
+                    >
+                      <XCircle className="w-4 h-4" />
                     </button>
                   )}
                 </td>
@@ -480,11 +491,62 @@ const PractitionerDashboard = () => {
                 >
                   <LogOut className="h-5 w-5" />
                 </button>
+                <button
+                  onClick={() => setDeleteAccountOpen(true)}
+                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                  title="Delete Account"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Delete Account Modal */}
+      {deleteAccountOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Account</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Your practitioner account and all associated data will be permanently deleted.
+              Enter your password to confirm.
+            </p>
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={deletePassword}
+              onChange={e => { setDeletePassword(e.target.value); setDeleteError(''); }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            {deleteError && <p className="text-sm text-red-600 mb-3">{deleteError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteAccountOpen(false); setDeletePassword(''); setDeleteError(''); }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete My Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 transition-colors">

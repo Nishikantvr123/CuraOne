@@ -75,6 +75,42 @@ export const NotificationProvider = ({ children }) => {
   const [state, dispatch] = useReducer(notificationReducer, initialState);
   const { user, isAuthenticated } = useAuth();
 
+  // Fetch real notifications from API on login
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const fetchNotifications = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        const r = await fetch('/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const d = await r.json();
+        if (d.success && d.data?.notifications) {
+          d.data.notifications.forEach(n => {
+            dispatch({
+              type: 'ADD_NOTIFICATION',
+              payload: {
+                id: n.id,
+                title: n.title,
+                message: n.message,
+                type: n.type || 'appointment',
+                timestamp: n.createdAt || n.timestamp || new Date().toISOString(),
+                isRead: n.isRead || false,
+                data: n.data || {}
+              }
+            });
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+      }
+    };
+
+    fetchNotifications();
+  }, [isAuthenticated, user?.id]);
+
   useEffect(() => {
     if (!isAuthenticated || !user) {
       return;
@@ -161,20 +197,50 @@ export const NotificationProvider = ({ children }) => {
     }
   }, []);
 
-  const markAsRead = (notificationId) => {
+  const markAsRead = async (notificationId) => {
     dispatch({ type: 'MARK_AS_READ', payload: notificationId });
+    // Persist to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch(`/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     dispatch({ type: 'MARK_ALL_AS_READ' });
+    // Persist to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch('/api/notifications/mark-all-read', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Error marking all notifications as read:', err);
+    }
   };
 
   const clearNotifications = () => {
     dispatch({ type: 'CLEAR_NOTIFICATIONS' });
   };
 
-  const removeNotification = (notificationId) => {
+  const removeNotification = async (notificationId) => {
     dispatch({ type: 'REMOVE_NOTIFICATION', payload: notificationId });
+    // Persist delete to backend
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch(`/api/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Error deleting notification:', err);
+    }
   };
 
   // Send test notification (for development)

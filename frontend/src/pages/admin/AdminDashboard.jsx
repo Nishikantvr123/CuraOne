@@ -108,84 +108,74 @@ const AdminDashboard = () => {
   };
 
   const loadStats = async () => {
-    // Mock stats - in real app would come from API
-    setStats({
-      totalUsers: 156,
-      totalBookings: 89,
-      totalTherapies: 12,
-      revenue: 15680,
-      pendingBookings: 7,
-      activeUsers: 23
-    });
+    try {
+      // Fetch real bookings to calculate stats
+      const response = await apiService.get('/bookings/my-bookings');
+      if (response.success && response.data?.bookings) {
+        const bookings = response.data.bookings.filter(b => b !== null);
+        const totalRevenue = bookings
+          .filter(b => b?.status === 'completed')
+          .reduce((sum, b) => sum + (b?.therapy?.price || 0), 0);
+        const pendingCount = bookings.filter(b => b?.status === 'scheduled' || b?.status === 'pending').length;
+        
+        setStats(prev => ({
+          ...prev,
+          totalBookings: bookings.length,
+          revenue: totalRevenue,
+          pendingBookings: pendingCount,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      // Keep default mock stats if API fails
+      setStats({
+        totalUsers: 0,
+        totalBookings: 0,
+        totalTherapies: 0,
+        revenue: 0,
+        pendingBookings: 0,
+        activeUsers: 0
+      });
+    }
   };
 
   const loadRecentBookings = async () => {
-    // Mock recent bookings - in real app would fetch from API
-    setRecentBookings([
-      {
-        id: '1',
-        patient: { name: 'Rahul Sharma', email: 'rahul.sharma@example.com' },
-        therapy: { name: 'Abhyanga' },
-        practitioner: { name: 'Dr. Aman Verma' },
-        date: '2024-01-20',
-        time: '10:00',
-        status: 'confirmed',
-        amount: 120
-      },
-      {
-        id: '2',
-        patient: { name: 'Priya Patel', email: 'priya.patel@example.com' },
-        therapy: { name: 'Shirodhara' },
-        practitioner: { name: 'Dr. Aman Verma' },
-        date: '2024-01-21',
-        time: '14:30',
-        status: 'pending',
-        amount: 150
-      },
-      {
-        id: '3',
-        patient: { name: 'Arjun Singh', email: 'arjun.singh@example.com' },
-        therapy: { name: 'Panchakarma' },
-        practitioner: { name: 'Dr. Aman Verma' },
-        date: '2024-01-22',
-        time: '09:00',
-        status: 'completed',
-        amount: 300
+    try {
+      const response = await apiService.get('/bookings/my-bookings?limit=5');
+      if (response.success && response.data?.bookings) {
+        const bookings = response.data.bookings
+          .filter(b => b !== null)
+          .map(b => ({
+            id: b.id,
+            patient: { 
+              name: b.patient ? `${b.patient.firstName} ${b.patient.lastName}` : 'Unknown',
+              email: b.patient?.email || ''
+            },
+            therapy: { name: b.therapy?.name || 'Unknown Therapy' },
+            practitioner: { name: b.practitioner ? `${b.practitioner.firstName} ${b.practitioner.lastName}` : 'Unknown' },
+            date: b.scheduledDate,
+            time: b.scheduledTime,
+            status: b.status === 'scheduled' ? 'pending' : b.status,
+            amount: b.therapy?.price || 0
+          }));
+        setRecentBookings(bookings);
       }
-    ]);
+    } catch (error) {
+      console.error('Error loading recent bookings:', error);
+      setRecentBookings([]);
+    }
   };
 
   const loadUsers = async () => {
-    // Mock users - in real app would fetch from API
-    setUsers([
-      {
-        id: '1',
-        name: 'Rahul Sharma',
-        email: 'rahul.sharma@example.com',
-        role: 'patient',
-        status: 'active',
-        joinDate: '2024-01-15',
-        lastLogin: '2024-01-20'
-      },
-      {
-        id: '2',
-        name: 'Dr. Aman Verma',
-        email: 'aman.verma@example.com',
-        role: 'practitioner',
-        status: 'active',
-        joinDate: '2023-12-01',
-        lastLogin: '2024-01-20'
-      },
-      {
-        id: '3',
-        name: 'Priya Patel',
-        email: 'priya.patel@example.com',
-        role: 'patient',
-        status: 'inactive',
-        joinDate: '2024-01-10',
-        lastLogin: '2024-01-18'
+    try {
+      const response = await apiService.get('/patients');
+      if (response.success) {
+        setUsers(response.data || []);
       }
-    ]);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      setUsers([]);
+    }
   };
 
   const loadTherapies = async () => {
@@ -200,27 +190,17 @@ const AdminDashboard = () => {
   };
 
   const loadNotifications = async () => {
-    // Mock notifications - in real app would fetch from API
-    setNotifications([
-      {
-        id: '1',
-        title: 'New Booking Request',
-        message: 'John Doe has requested an Abhyanga session',
-        type: 'booking',
-        priority: 'normal',
-        timestamp: '2024-01-20T10:30:00Z',
-        isRead: false
-      },
-      {
-        id: '2',
-        title: 'System Update',
-        message: 'Monthly backup completed successfully',
-        type: 'system',
-        priority: 'low',
-        timestamp: '2024-01-20T02:00:00Z',
-        isRead: true
+    try {
+      const response = await apiService.get('/notifications');
+      if (response.success && response.data?.notifications) {
+        setNotifications(response.data.notifications);
+      } else {
+        setNotifications([]);
       }
-    ]);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      setNotifications([]);
+    }
   };
 
   // Event handlers for various actions
@@ -405,7 +385,7 @@ const AdminDashboard = () => {
         />
         <StatCard
           title="Revenue"
-          value={`$${stats.revenue.toLocaleString()}`}
+          value={`₹${stats.revenue.toLocaleString('en-IN')}`}
           icon={DollarSign}
           color="bg-purple-500"
           change={15}
@@ -449,7 +429,7 @@ const AdminDashboard = () => {
                     <p className="text-xs text-gray-500">{booking.therapy.name} - {booking.date} {booking.time}</p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-900">${booking.amount}</span>
+                    <span className="text-sm font-medium text-gray-900">₹{booking.amount}</span>
                     {getStatusBadge(booking.status)}
                   </div>
                 </div>
@@ -465,22 +445,30 @@ const AdminDashboard = () => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {notifications.slice(0, 5).map((notification) => (
-                <div key={notification.id} className="flex items-start space-x-3">
-                  <div className={`p-1 rounded-full ${!notification.isRead ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                    <Bell className={`w-4 h-4 ${!notification.isRead ? 'text-blue-600' : 'text-gray-400'}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${!notification.isRead ? 'text-gray-900' : 'text-gray-500'}`}>
-                      {notification.title}
-                    </p>
-                    <p className="text-xs text-gray-500">{notification.message}</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(notification.timestamp).toLocaleString()}
-                    </p>
-                  </div>
+              {notifications.length === 0 ? (
+                <div className="text-center py-6">
+                  <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No notifications yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Booking updates will appear here</p>
                 </div>
-              ))}
+              ) : (
+                notifications.slice(0, 5).map((notification) => (
+                  <div key={notification.id} className="flex items-start space-x-3">
+                    <div className={`p-1 rounded-full ${!notification.isRead ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                      <Bell className={`w-4 h-4 ${!notification.isRead ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${!notification.isRead ? 'text-gray-900' : 'text-gray-500'}`}>
+                        {notification.title}
+                      </p>
+                      <p className="text-xs text-gray-500">{notification.message}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(notification.createdAt || notification.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -570,7 +558,7 @@ const AdminDashboard = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Price:</span>
-                  <span className="text-gray-900 font-medium">${therapy.price}</span>
+                  <span className="text-gray-900 font-medium">₹{therapy.price}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Category:</span>
@@ -673,7 +661,7 @@ const AdminDashboard = () => {
           />
           <StatCard
             title="Revenue"
-            value={`$${stats.revenue.toLocaleString()}`}
+            value={`₹${stats.revenue.toLocaleString('en-IN')}`}
             icon={DollarSign}
             color="bg-purple-500"
             change={15}
@@ -755,7 +743,7 @@ const AdminDashboard = () => {
                     <div className="text-sm text-gray-500">{booking.time}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${booking.amount}
+                    ₹{booking.amount}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getStatusBadge(booking.status)}
@@ -1111,6 +1099,7 @@ const AdminDashboard = () => {
     { id: 'overview', name: 'Overview', icon: BarChart3 },
     { id: 'patients', name: 'Patients', icon: Users },
     { id: 'users', name: 'Users', icon: Users },
+    { id: 'practitioners', name: 'Practitioners', icon: Activity },
     { id: 'therapies', name: 'Therapies', icon: Activity },
     { id: 'bookings', name: 'Bookings', icon: Calendar },
     { id: 'settings', name: 'Settings', icon: Settings }
@@ -1209,6 +1198,7 @@ const AdminDashboard = () => {
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'patients' && <PatientManagement />}
         {activeTab === 'users' && renderUsersTab()}
+        {activeTab === 'practitioners' && <PractitionerManagementTab />}
         {activeTab === 'therapies' && renderTherapiesTab()}
         {activeTab === 'bookings' && renderBookingsTab()}
         {activeTab === 'settings' && renderSettingsTab()}
@@ -1226,6 +1216,150 @@ const AdminDashboard = () => {
     </NotificationProvider>
   );
 };
+
+// ─── Practitioner Management Tab ─────────────────────────────────────────────
+function PractitionerManagementTab() {
+  const [practitioners, setPractitioners] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState('');
+  const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` };
+
+  const loadPractitioners = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/admin/practitioners', { headers: authHeader });
+      const d = await r.json();
+      setPractitioners(d.data?.practitioners || []);
+    } catch {
+      setPractitioners([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => { loadPractitioners(); }, []);
+
+  const handleDelete = async (practitioner) => {
+    if (!window.confirm(`Are you sure you want to delete ${practitioner.firstName} ${practitioner.lastName}? This cannot be undone.`)) return;
+    try {
+      const r = await fetch(`/api/admin/practitioners/${practitioner.id}`, {
+        method: 'DELETE',
+        headers: authHeader
+      });
+      const d = await r.json();
+      if (d.success) {
+        setPractitioners(prev => prev.filter(p => p.id !== practitioner.id));
+      } else {
+        alert(d.error || 'Failed to delete practitioner');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  const filtered = practitioners.filter(p => {
+    const q = search.toLowerCase();
+    return (
+      p.firstName?.toLowerCase().includes(q) ||
+      p.lastName?.toLowerCase().includes(q) ||
+      p.email?.toLowerCase().includes(q) ||
+      p.specialization?.join(' ').toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="bg-white rounded-lg shadow">
+      <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900">Practitioner Management</h3>
+          <p className="text-sm text-gray-500 mt-1">Manage all registered practitioners. New practitioners appear here automatically when they sign up.</p>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search practitioners..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-7 h-7 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">No practitioners found</p>
+          <p className="text-sm text-gray-400 mt-1">Practitioners will appear here when they register with a practitioner account</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                {['Practitioner', 'Email', 'Specializations', 'Experience', 'Status', 'Actions'].map(h => (
+                  <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filtered.map(p => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold text-sm">
+                        {(p.firstName?.[0] || 'D').toUpperCase()}
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-900">{p.firstName} {p.lastName}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{p.email}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {(p.specialization || []).map((s, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{s}</span>
+                      ))}
+                      {(!p.specialization || p.specialization.length === 0) && (
+                        <span className="text-xs text-gray-400">Not specified</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {p.experience ? `${p.experience} years` : '—'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {p.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => handleDelete(p)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
+                      title="Delete practitioner"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="px-6 py-3 bg-gray-50 border-t text-sm text-gray-500">
+            Showing {filtered.length} of {practitioners.length} practitioners
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default AdminDashboard;
 
