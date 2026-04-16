@@ -22,11 +22,14 @@ import {
   Edit,
   LogOut,
   Leaf,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import bookingService from '../../services/bookingService';
 import apiService from '../../services/api';
+import PrescriptionForm from './PrescriptionForm';
+import PrescriptionManagement from '../../components/prescriptions/PrescriptionManagement';
 import { NotificationBell, NotificationProvider } from '../../components/notifications/NotificationSystem';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 
@@ -49,6 +52,7 @@ const PractitionerDashboard = () => {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [prescriptionOpen, setPrescriptionOpen] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -432,6 +436,7 @@ const PractitionerDashboard = () => {
     { id: 'overview', name: 'Overview', icon: Activity },
     { id: 'appointments', name: 'Appointments', icon: Calendar },
     { id: 'patients', name: 'Patients', icon: Users },
+    { id: 'prescriptions', name: 'Prescriptions', icon: FileText },
     { id: 'feedback', name: 'Feedback', icon: MessageSquare }
   ];
 
@@ -579,6 +584,7 @@ const PractitionerDashboard = () => {
         {activeTab === 'appointments' && renderAppointmentsTab()}
         {activeTab === 'patients' && <PatientManagementTab />}
         {activeTab === 'feedback' && <FeedbackTab />}
+        {activeTab === 'prescriptions' && <PrescriptionManagement />}
       </div>
       </div>
     </NotificationProvider>

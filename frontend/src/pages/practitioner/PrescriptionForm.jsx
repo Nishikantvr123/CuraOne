@@ -14,10 +14,10 @@ import {
 } from 'lucide-react';
 import { apiService } from '../../services/api';
 
-const PrescriptionForm = ({ onBack, patientId: initialPatientId }) => {
+const PrescriptionForm = ({ onBack, patientId: initialPatientId, patient: initialPatient }) => {
   const [patients, setPatients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState(initialPatient || null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -33,17 +33,24 @@ const PrescriptionForm = ({ onBack, patientId: initialPatientId }) => {
   });
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    // Only load patients if no patient is pre-selected
+    if (!initialPatient) {
+      loadPatients();
+    }
+  }, [initialPatient]);
 
   useEffect(() => {
-    if (initialPatientId) {
+    // Set patient from initialPatient prop if provided
+    if (initialPatient) {
+      setSelectedPatient(initialPatient);
+    } else if (initialPatientId && patients.length > 0) {
+      // Fallback to finding by ID if only ID is provided
       const patient = patients.find(p => p.id === initialPatientId);
       if (patient) {
         setSelectedPatient(patient);
       }
     }
-  }, [initialPatientId, patients]);
+  }, [initialPatientId, initialPatient, patients]);
 
   const loadPatients = async () => {
     try {
@@ -209,7 +216,7 @@ const PrescriptionForm = ({ onBack, patientId: initialPatientId }) => {
 
           <div className="bg-gray-50 p-4 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Patient
+              {initialPatient ? 'Patient' : 'Select Patient'}
             </label>
             {selectedPatient ? (
               <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-emerald-200">
@@ -224,13 +231,16 @@ const PrescriptionForm = ({ onBack, patientId: initialPatientId }) => {
                     <p className="text-sm text-gray-500">{selectedPatient.email}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPatient(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                {!initialPatient && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="Change patient"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

@@ -15,7 +15,12 @@ import {
   Zap,
   User,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  FileText,
+  Eye,
+  Printer,
+  Pill,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
@@ -31,6 +36,7 @@ import WellnessModal from '../../components/modals/WellnessModal';
 import PatientProfileView from '../../components/modals/PatientProfileView';
 import RealtimeStatus from '../../components/realtime/RealtimeStatus';
 import ThemeToggle from '../../components/ui/ThemeToggle';
+import { downloadPrescriptionPDF, viewPrescriptionPDF } from '../../components/prescriptions/PrescriptionPDFGenerator';
 import toast from '../../utils/toast';
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
@@ -170,6 +176,7 @@ export const EnhancedPatientDashboard = () => {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   
   // Real data states
   const [progressMetrics, setProgressMetrics] = useState({
@@ -777,6 +784,13 @@ export const EnhancedPatientDashboard = () => {
                     onClick: handleBookSession
                   },
                   { 
+                    icon: FileText, 
+                    label: 'My Prescriptions', 
+                    color: 'text-purple-600', 
+                    bg: 'hover:bg-purple-50',
+                    onClick: () => setPrescriptionsOpen(true)
+                  },
+                  { 
                     icon: Heart, 
                     label: 'Update Wellness Goals', 
                     color: 'text-emerald-600', 
@@ -918,6 +932,174 @@ export const EnhancedPatientDashboard = () => {
         isOpen={profileModalOpen}
         onClose={() => setProfileModalOpen(false)}
       />
+
+      {/* Prescriptions Modal */}
+      {prescriptionsOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-50 to-blue-50">
+              <div className="flex items-center gap-3">
+                <FileText className="w-6 h-6 text-purple-600" />
+                <h2 className="text-xl font-bold text-gray-900">My Prescriptions</h2>
+              </div>
+              <button onClick={() => setPrescriptionsOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-gray-400 rotate-45" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <PrescriptionsPanel />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+// ─── Prescriptions Panel ──────────────────────────────────────────────────────
+function PrescriptionsPanel() {
+  const [prescriptions, setPrescriptions] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [selected, setSelected] = React.useState(null);
+  const [filter, setFilter] = React.useState('all');
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    fetch(`/api/prescriptions/my?limit=50`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(d => setPrescriptions(d.data?.prescriptions || []))
+      .catch(() => setPrescriptions([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = filter === 'all' ? prescriptions : prescriptions.filter(p => p.status === filter);
+
+  const handlePrint = (p) => {
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>Prescription</title><style>
+      body{font-family:Arial,sans-serif;padding:40px;max-width:800px;margin:0 auto}
+      h1{color:#059669}.med{background:#f0fdf4;padding:12px;border-radius:8px;margin:8px 0;border-left:4px solid #059669}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+      .box{background:#f9fafb;padding:12px;border-radius:8px}label{font-weight:bold;display:block;margin-bottom:4px}
+    </style></head><body>
+      <h1>CuraOne - E-Prescription</h1>
+      <div class="grid">
+        <div class="box"><label>Patient</label>${p.patientName}</div>
+        <div class="box"><label>Practitioner</label>${p.practitionerName}</div>
+        <div class="box"><label>Date</label>${new Date(p.createdAt).toLocaleDateString()}</div>
+        <div class="box"><label>Duration</label>${p.duration}</div>
+      </div>
+      <div class="box" style="margin-bottom:16px"><label>Diagnosis</label>${p.diagnosis}</div>
+      <h3>Medications</h3>
+      ${p.medications.map(m => `<div class="med"><strong>${m.name}</strong><br/>Dosage: ${m.dosage} | Frequency: ${m.frequency}${m.instructions ? `<br/>Instructions: ${m.instructions}` : ''}</div>`).join('')}
+      ${p.instructions ? `<div class="box" style="margin-top:16px;border-left:4px solid #f59e0b"><label>Special Instructions</label>${p.instructions}</div>` : ''}
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
+  if (loading) return <div className="p-8 text-center"><div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          <option value="all">All</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+        </select>
+        <span className="text-sm text-gray-500">{filtered.length} prescription(s)</span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">No prescriptions found</p>
+          <p className="text-sm text-gray-400 mt-1">Your practitioner will add prescriptions after your session</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(p => (
+            <div key={p.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-semibold text-gray-900">{p.diagnosis}</h3>
+                    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                    <span className="flex items-center gap-1"><User className="w-3 h-3" />{p.practitionerName}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(p.createdAt).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{p.duration}</span>
+                    <span className="flex items-center gap-1"><Pill className="w-3 h-3" />{p.medications?.length || 0} medication(s)</span>
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <button onClick={() => setSelected(p)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="View">
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => viewPrescriptionPDF(p)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="View PDF">
+                    <FileText className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => downloadPrescriptionPDF(p)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Download PDF">
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => handlePrint(p)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg" title="Print">
+                    <Printer className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <div className="p-5 border-b flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">Prescription Details</h3>
+              <button onClick={() => setSelected(null)} className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 text-xl leading-none">&times;</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {[['Diagnosis', selected.diagnosis], ['Duration', selected.duration], ['Practitioner', selected.practitionerName], ['Date', new Date(selected.createdAt).toLocaleDateString()]].map(([l, v]) => (
+                  <div key={l} className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500 mb-1">{l}</p><p className="text-sm font-medium text-gray-900">{v}</p></div>
+                ))}
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">Medications</h4>
+                {selected.medications?.map((m, i) => (
+                  <div key={i} className="bg-emerald-50 border-l-4 border-emerald-500 p-3 rounded-lg mb-2">
+                    <p className="font-medium text-gray-900">{m.name}</p>
+                    <p className="text-sm text-gray-600">Dosage: {m.dosage} | Frequency: {m.frequency}</p>
+                    {m.instructions && <p className="text-sm text-gray-600">Instructions: {m.instructions}</p>}
+                  </div>
+                ))}
+              </div>
+              {selected.instructions && (
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 rounded-lg">
+                  <p className="text-xs font-medium text-amber-800 mb-1">Special Instructions</p>
+                  <p className="text-sm text-gray-700">{selected.instructions}</p>
+                </div>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setSelected(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">Close</button>
+                <button onClick={() => downloadPrescriptionPDF(selected)} className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm flex items-center justify-center gap-2">
+                  <Download className="w-4 h-4" /> Download PDF
+                </button>
+                <button onClick={() => handlePrint(selected)} className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm flex items-center justify-center gap-2">
+                  <Printer className="w-4 h-4" /> Print
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

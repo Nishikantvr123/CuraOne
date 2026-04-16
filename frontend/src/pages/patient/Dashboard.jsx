@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Activity, Heart, Clock, Plus, TrendingUp, Bell, LogOut, Leaf } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import PrescriptionWidget from '../../components/prescriptions/PrescriptionWidget';
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -238,6 +239,9 @@ export const PatientDashboard = () => {
 
           {/* Quick Actions */}
           <div className="space-y-8">
+            {/* Prescriptions Widget */}
+            <PrescriptionWidget />
+
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>

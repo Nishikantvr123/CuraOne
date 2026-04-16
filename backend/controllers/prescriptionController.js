@@ -4,7 +4,6 @@
  */
 
 import { findMany, findOne, insertOne, updateOne } from '../config/database.js';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @desc    Create new prescription
@@ -66,7 +65,6 @@ export const createPrescription = async (req, res, next) => {
     }
 
     const prescription = {
-      id: uuidv4(),
       patientId,
       patientName: `${patient.firstName} ${patient.lastName}`,
       patientEmail: patient.email,

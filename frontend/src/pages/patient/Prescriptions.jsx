@@ -11,9 +11,11 @@ import {
   ChevronRight,
   AlertCircle,
   CheckCircle,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { downloadPrescriptionPDF, viewPrescriptionPDF } from '../../components/prescriptions/PrescriptionPDFGenerator';
 
 const Prescriptions = () => {
   const [prescriptions, setPrescriptions] = useState([]);
@@ -237,8 +239,22 @@ const Prescriptions = () => {
                       <Eye className="w-5 h-5" />
                     </button>
                     <button
-                      onClick={() => handlePrint(prescription)}
+                      onClick={() => viewPrescriptionPDF(prescription)}
                       className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="View PDF"
+                    >
+                      <FileText className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => downloadPrescriptionPDF(prescription)}
+                      className="p-2 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                      title="Download PDF"
+                    >
+                      <Download className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handlePrint(prescription)}
+                      className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                       title="Print"
                     >
                       <Printer className="w-5 h-5" />
@@ -349,8 +365,15 @@ const Prescriptions = () => {
                   Close
                 </button>
                 <button
-                  onClick={() => handlePrint(selectedPrescription)}
+                  onClick={() => downloadPrescriptionPDF(selectedPrescription)}
                   className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => handlePrint(selectedPrescription)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                 >
                   <Printer className="w-4 h-4" />
                   Print
