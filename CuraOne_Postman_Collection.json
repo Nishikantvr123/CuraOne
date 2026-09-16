@@ -1,0 +1,691 @@
+{
+  "info": {
+    "name": "CuraOne API Collection",
+    "_postman_id": "curaone-fyp-api-v2",
+    "description": "Postman collection for CuraOne research prototype API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testPatientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testTargetHospitalId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testGrantId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. System & Health",
+      "item": [
+        {
+          "name": "Health Check (Lightweight Ping)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        },
+        {
+          "name": "System Stats (Record Counts)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication & Profile",
+      "item": [
+        {
+          "name": "Register - New Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('authToken', res.token);",
+                  "    console.log('authToken set for newly registered patient!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Bob\",\n  \"lastName\": \"Marley\",\n  \"email\": \"bob.marley@test.curaone.health\",\n  \"password\": \"password123\",\n  \"city\": \"Kingston\",\n  \"state\": \"MA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login - Doctor (Auto-saves Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('authToken', res.token);",
+                  "    console.log('authToken updated to Doctor token!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"tomas.sauer.3421@curaone.health\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login - Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('authToken', res.token);",
+                  "    console.log('authToken updated to Patient token!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"raye.wunsch.e4f1@patient.curaone.health\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login - Hospital Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('authToken', res.token);",
+                  "    console.log('authToken updated to Hospital Admin token!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin.ef58@hospital.curaone.health\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login - System Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('authToken', res.token);",
+                  "    console.log('authToken updated to System Admin token!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@curaone.health\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Platform Administration (System Admin)",
+      "item": [
+        {
+          "name": "Provision New Hospital",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Metro West Medical Center\",\n  \"adminEmail\": \"admin@metrowest.curaone.health\",\n  \"password\": \"hospital123\",\n  \"city\": \"Framingham\",\n  \"state\": \"MA\",\n  \"phone\": \"5083831000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/hospitals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "hospitals"]
+            }
+          }
+        },
+        {
+          "name": "List All Hospitals (Admin View)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/hospitals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "hospitals"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Hospital Administration (Hospital Admin)",
+      "item": [
+        {
+          "name": "Provision New Doctor to Hospital",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. Robert Chase\",\n  \"specialty\": \"Intensive Care\",\n  \"gender\": \"M\",\n  \"email\": \"chase@hospital.curaone.health\",\n  \"password\": \"doctor123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hospitals/doctors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hospitals", "doctors"]
+            }
+          }
+        },
+        {
+          "name": "List Doctors for My Hospital",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hospitals/doctors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hospitals", "doctors"]
+            }
+          }
+        },
+        {
+          "name": "Hospital Directory (Searchable)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hospitals?search=general",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hospitals"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "general"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Patient Directory & Longitudinal Records",
+      "item": [
+        {
+          "name": "Search Patients Directory (Doctor / Hospital)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.patients && res.patients.length > 0) {",
+                  "    pm.collectionVariables.set('testPatientId', res.patients[0].id);",
+                  "    console.log('testPatientId automatically saved:', res.patients[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients?search=raye",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "raye"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Patient Profile by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{testPatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{testPatientId}}"]
+            }
+          }
+        },
+        {
+          "name": "Provider Longitudinal Timeline (Gated Access: Locked vs Unlocked)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{testPatientId}}/timeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{testPatientId}}", "timeline"]
+            }
+          }
+        },
+        {
+          "name": "Patient Sovereign Self Timeline (100% Unlocked)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/me/timeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "me", "timeline"]
+            }
+          }
+        },
+        {
+          "name": "Patient Self Profile (/me/profile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/me/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "me", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Doctor Record Live Encounter & Diagnoses",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDate\": \"2026-09-16T10:00:00.000Z\",\n  \"encounterClass\": \"AMBULATORY\",\n  \"description\": \"Cardiology Review & Medication Management\",\n  \"reasonDescription\": \"Essential hypertension follow-up\",\n  \"events\": [\n    {\n      \"eventType\": \"CONDITION\",\n      \"code\": \"59621000\",\n      \"description\": \"Essential hypertension (disorder)\",\n      \"reasonDescription\": \"Elevated BP recorded during clinical checkup\"\n    },\n    {\n      \"eventType\": \"MEDICATION\",\n      \"code\": \"197361\",\n      \"description\": \"Amlodipine 5 MG Oral Tablet\",\n      \"reasonDescription\": \"Once daily morning oral dosage prescribed\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{testPatientId}}/encounters",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{testPatientId}}", "encounters"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Cross-Hospital Access Grants",
+      "item": [
+        {
+          "name": "Doctor Request Record Access Grant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.grant && res.grant.id) {",
+                  "    pm.collectionVariables.set('testGrantId', res.grant.id);",
+                  "    console.log('testGrantId automatically saved:', res.grant.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{testPatientId}}\",\n  \"targetHospitalId\": \"{{testTargetHospitalId}}\",\n  \"purpose\": \"Evaluation of past cardiology encounters and medication history\",\n  \"durationDays\": 7\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grants",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants"]
+            }
+          }
+        },
+        {
+          "name": "List Access Grants (Auto-scoped by Role)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.grants && res.grants.length > 0) {",
+                  "    pm.collectionVariables.set('testGrantId', res.grants[0].id);",
+                  "    console.log('testGrantId updated from list:', res.grants[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/grants?status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Access Grant by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/grants/{{testGrantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants", "{{testGrantId}}"]
+            }
+          }
+        },
+        {
+          "name": "Patient Approve Access Grant (Consent)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"durationDays\": 7\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grants/{{testGrantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants", "{{testGrantId}}"]
+            }
+          }
+        },
+        {
+          "name": "Patient Reject Access Grant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grants/{{testGrantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants", "{{testGrantId}}"]
+            }
+          }
+        },
+        {
+          "name": "Patient or Doctor Revoke Access Grant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REVOKED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grants/{{testGrantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "grants", "{{testGrantId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
