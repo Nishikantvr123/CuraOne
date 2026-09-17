@@ -1,0 +1,15 @@
+{
+  "seed": 20260917,
+  "cohort_patients": 69,
+  "event_count": 19657,
+  "query_count": 370,
+  "k_values": [
+    3,
+    5,
+    7,
+    10
+  ],
+  "query_definition": "Query generated from an authorized event description; relevant set is events from the same encounter intersected with the authorization scope.",
+  "authorization_policy": "Requesting hospital plus first two external hospitals by event volume are authorized; remaining hospitals are unauthorized experimental annotations.",
+  "note": "This benchmark uses Synthea data already included in the CuraOne repository. Authorization labels are experimental annotations and are not source-dataset facts."
+}
