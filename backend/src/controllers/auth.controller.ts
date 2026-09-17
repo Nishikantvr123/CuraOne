@@ -29,12 +29,14 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
+      const issues = error.issues.map((issue: any) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
       return res.status(400).json({
         error: 'Validation Error',
-        issues: error.issues.map((issue: any) => ({
-          field: issue.path.join('.'),
-          message: issue.message,
-        })),
+        message: issues.map((i) => i.message).join(', '),
+        issues,
       });
     }
     next(error);
@@ -55,12 +57,14 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
+      const issues = error.issues.map((issue: any) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
       return res.status(400).json({
         error: 'Validation Error',
-        issues: error.issues.map((issue: any) => ({
-          field: issue.path.join('.'),
-          message: issue.message,
-        })),
+        message: issues.map((i) => i.message).join(', '),
+        issues,
       });
     }
     next(error);

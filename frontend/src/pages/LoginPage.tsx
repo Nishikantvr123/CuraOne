@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { getApiErrorMessage } from '@/lib/api';
 import { Card, CardHeader, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -108,7 +109,7 @@ export const LoginPage: React.FC = () => {
       toast.success(`Welcome back, ${user.name}!`);
       navigate(redirectPath, { replace: true });
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.message || 'Authentication failed. Check your credentials.';
+      const msg = getApiErrorMessage(err, 'Authentication failed. Check your credentials.');
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
@@ -135,7 +136,7 @@ export const LoginPage: React.FC = () => {
       toast.success(`Account created! Welcome, ${user.name}`);
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.issues?.[0]?.message || 'Registration failed';
+      const msg = getApiErrorMessage(err, 'Registration failed. Check your information.');
       toast.error(msg);
     } finally {
       setIsSubmitting(false);

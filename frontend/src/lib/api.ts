@@ -34,3 +34,37 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * Universal error extractor for backend responses.
+ * Accurately parses Zod validation issues, structured server messages, and HTTP errors.
+ */
+export function getApiErrorMessage(err: any, defaultMsg = 'An unexpected error occurred'): string {
+  const data = err?.response?.data;
+  if (!data) {
+    return err?.message || defaultMsg;
+  }
+
+  // 1. Zod validation issues array: [{ field: 'email', message: 'Please provide a valid email address' }]
+  if (Array.isArray(data.issues) && data.issues.length > 0) {
+    return data.issues
+      .map((issue: any) => issue.message || `${issue.field}: invalid`)
+      .join(', ');
+  }
+
+  // 2. Specific readable backend message (e.g. 'Invalid email or password', 'Doctor affiliation required')
+  if (data.message && typeof data.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+
+  // 3. Descriptive error string if it's not generic 'Error' or status codes
+  if (
+    data.error &&
+    typeof data.error === 'string' &&
+    !['Error', 'InternalServerError', 'Validation Error', 'BadRequest'].includes(data.error)
+  ) {
+    return data.error;
+  }
+
+  return defaultMsg;
+}

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { PaginationControl } from '@/components/ui/pagination-control';
 import { Search, User as UserIcon, ArrowRight, Loader2, Calendar, MapPin, Mail } from 'lucide-react';
 
 interface PatientSearchDirectoryProps {
@@ -25,27 +26,37 @@ function calculateAge(birthdateStr: string): number {
 
 export const PatientSearchDirectory: React.FC<PatientSearchDirectoryProps> = ({ onSelectPatient }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const { data, isLoading, isError } = useQuery<SearchPatientsResponse>({
-    queryKey: ['patients', searchTerm],
+    queryKey: ['patients', searchTerm, page],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchTerm.trim()) {
         params.append('search', searchTerm.trim());
       }
-      params.append('limit', '30');
+      params.append('limit', pageSize.toString());
+      params.append('offset', ((page - 1) * pageSize).toString());
       const res = await api.get<SearchPatientsResponse>(`/patients?${params.toString()}`);
       return res.data;
     },
   });
 
   const patients = data?.patients || [];
+  const totalItems = data?.pagination?.total || 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val);
+    setPage(1);
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* 1. Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Patients</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Patients Directory</h1>
         <p className="text-sm text-muted-foreground">
           Search and select a patient to review their longitudinal clinical history.
         </p>
@@ -58,13 +69,13 @@ export const PatientSearchDirectory: React.FC<PatientSearchDirectoryProps> = ({ 
           type="text"
           placeholder="Search patients by name, DOB, or email..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-10 h-11 text-sm bg-background border-border/80 focus-visible:ring-1"
         />
         {searchTerm && (
           <button
             type="button"
-            onClick={() => setSearchTerm('')}
+            onClick={() => handleSearchChange('')}
             className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
           >
             Clear
@@ -164,6 +175,18 @@ export const PatientSearchDirectory: React.FC<PatientSearchDirectoryProps> = ({ 
           })
         )}
       </div>
+
+      {/* 4. Pagination */}
+      {!isLoading && !isError && totalItems > 0 && (
+        <PaginationControl
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          itemLabel="patients"
+        />
+      )}
     </div>
   );
 };

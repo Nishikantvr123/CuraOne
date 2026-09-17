@@ -13,16 +13,20 @@ Strictly adhere to the standard React SPA structure:
 ```text
 frontend/src/
 ├── components/
-│   ├── ui/               # Primitive shadcn design tokens (button, card, input, dialog...)
-│   ├── layout/           # RootLayout, Navbar (user dropdown), ProtectedRoute
-│   ├── auth/             # Quick demo login bar, registration forms
-│   └── patients/         # TimelineCard, AccessGrantBadge, etc.
-├── pages/                # Top-level screen routes (LoginPage, DashboardPage, etc.)
-├── context/              # AuthContext.tsx
+│   ├── ui/               # Primitive shadcn design tokens (button, card, input, dialog, textarea...)
+│   ├── layout/           # RootLayout, Navbar (brand left, signout right), DoctorSidebar, HospitalSidebar, ProtectedRoute
+│   ├── auth/             # Quick demo role switchers, patient registration forms
+│   ├── patients/         # PatientSearchDirectory, PatientTimelineView, EncounterDetailModal, RecordEncounterModal
+│   ├── grants/           # DoctorGrantsView, RequestGrantModal
+│   ├── hospital/         # HospitalDoctorsView, ProvisionDoctorModal, HospitalOutboundGrantsView, HospitalInboundGrantsView, HospitalFacilityInfoView
+│   └── theme-provider.tsx# next-themes wrapper
+├── pages/                # Top-level screen routes (LoginPage, DashboardPage)
+├── context/              # AuthContext.tsx (user session & token management)
 ├── lib/                  # api.ts (Axios + JWT interceptor), utils.ts (cn)
 ├── types/                # auth.ts, patient.ts
-├── router.tsx            # createBrowserRouter configuration
-└── App.tsx               # QueryClientProvider -> ThemeProvider -> AuthProvider -> RouterProvider
+├── router.tsx            # createBrowserRouter object configuration
+├── App.tsx               # QueryClientProvider -> ThemeProvider -> AuthProvider -> RouterProvider
+└── vite.config.ts        # Vite 8 config with /api proxy to http://localhost:5000
 ```
 
 ## 3. Visual & Aesthetic Standards
@@ -31,8 +35,9 @@ frontend/src/
   - Managed by `next-themes` with `attribute="class"`, `defaultTheme="system"`.
   - Dark mode triggers via `.dark` class using OKLCH color spaces in `src/index.css`.
 * **Icon Rules**:
-  - **Monochrome Neutrality**: All content and card icons use `text-foreground` or `text-muted-foreground`.
+  - **Monochrome Neutrality**: All content and card icons strictly use `text-foreground` or `text-muted-foreground`.
   - **Brand Accent Rule**: ONLY the CuraOne title and its accompanying brand icon in the Navbar / Auth header use `primary` / `text-primary`.
-* **User Profile & Theme**:
-  - The Navbar displays a clean user trigger button (initials avatar + name + chevron).
-  - Hovering or clicking reveals a dropdown with unclickable profile/jurisdiction details, a nested Theme sub-dropdown (Light ☀️, Dark 🌙, System 💻), and a Sign Out option.
+* **Navigation & Workstation Rules**:
+  - **Navbar**: Strictly minimal. Left side contains CuraOne logo, title, and `EHR-RAG` badge. Right side contains a direct `[ Sign Out ]` button. No redundant user names, breadcrumbs, or facility names in the navbar.
+  - **Doctor Sidebar**: Fixed left sidebar for clinical jurisdiction. Top card shows the doctor's facility jurisdiction (Hospital name, city/state, attending doctor name, specialty). Middle section contains workspace navigation (`Patients Directory`, `New Clinical Visit`, `Access Grants`, `AI Copilot [RAG]`). Bottom section hosts the `Accessibility & Theme` dropdown (`Light ☀️`, `Dark 🌙`, `System 💻`).
+  - **Timeline Scannability**: Timeline cards display summary-level metadata and tags. Full encounter notes, diagnoses, and medication prescriptions open cleanly in a focused `EncounterDetailModal` on click.

@@ -2,17 +2,15 @@ import React from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from 'next-themes';
 import { 
+  Shield, 
   Building2, 
-  Users, 
-  PlusCircle, 
-  ShieldCheck, 
-  Sparkles, 
+  FileText, 
   Sun, 
   Moon, 
   Laptop, 
   Check, 
-  Stethoscope,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -24,141 +22,104 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 
-interface DoctorSidebarProps {
-  activeView: 'patients' | 'grants' | 'copilot' | 'new-visit';
-  onSelectView: (view: 'patients' | 'grants' | 'copilot' | 'new-visit') => void;
-  isPatientSelected?: boolean;
-  pendingGrantsCount?: number;
+export type AdminViewTab = 'hospitals' | 'audit';
+
+interface AdminSidebarProps {
+  activeTab: AdminViewTab;
+  onSelectTab: (tab: AdminViewTab) => void;
+  hospitalsCount?: number;
+  disputedCount?: number;
 }
 
-export const DoctorSidebar: React.FC<DoctorSidebarProps> = ({
-  activeView,
-  onSelectView,
-  isPatientSelected = false,
-  pendingGrantsCount = 0,
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({
+  activeTab,
+  onSelectTab,
+  hospitalsCount = 0,
+  disputedCount = 0,
 }) => {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
 
   if (!user) return null;
 
-  const hospitalName = user.details?.hospitalName || 'Custodial Medical Center';
-  const hospitalCity = user.details?.city || 'Leominster';
-  const hospitalState = user.details?.state || 'MA';
-  const specialty = user.details?.specialty || 'General Practice';
-
   return (
     <aside className="w-72 shrink-0 border-r border-border/60 bg-background/50 flex flex-col justify-between p-4 min-h-[calc(100vh-4rem)]">
       <div className="space-y-6">
-        {/* 1. Facility Jurisdiction */}
+        {/* 1. Root Jurisdiction Card */}
         <div className="rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-3">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <Building2 className="size-3.5 text-foreground" />
-            <span>Facility Jurisdiction</span>
+            <Shield className="size-3.5 text-foreground" />
+            <span>Root Network Jurisdiction</span>
           </div>
 
           <div>
-            <h2 className="text-sm font-bold text-foreground leading-tight">{hospitalName}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{hospitalCity}, {hospitalState}</p>
+            <h2 className="text-sm font-bold text-foreground leading-tight">CuraOne Federation</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Central Registry & Audit Root</p>
           </div>
 
-          <div className="pt-2 border-t border-border/50 flex items-center gap-2">
-            <div className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Stethoscope className="size-3.5 text-primary" />
-            </div>
+          <div className="pt-2 border-t border-border/50 flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground truncate">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{specialty}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
             </div>
+            <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30">
+              Root Admin
+            </Badge>
           </div>
         </div>
 
-        {/* 2. Clinical Navigation */}
+        {/* 2. Admin Navigation Links */}
         <div className="space-y-1">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Clinical Workspace
+            Network Administration
           </p>
 
-          {/* Patients Directory */}
+          {/* Hospital Nodes */}
           <button
             type="button"
-            onClick={() => onSelectView('patients')}
+            onClick={() => onSelectTab('hospitals')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === 'patients'
+              activeTab === 'hospitals'
                 ? 'bg-primary/10 text-primary font-semibold'
                 : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Users className="size-4 text-foreground" />
-              <span>Patients Directory</span>
+              <Building2 className="size-4 text-foreground" />
+              <span>Hospital Nodes</span>
             </div>
-          </button>
-
-          {/* New Clinical Visit (Always accessible dedicated clinical page) */}
-          <button
-            type="button"
-            onClick={() => onSelectView('new-visit')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === 'new-visit'
-                ? 'bg-primary/10 text-primary font-semibold'
-                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <PlusCircle className="size-4 text-foreground" />
-              <span>New Clinical Visit</span>
-            </div>
-            {isPatientSelected ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-                Patient Linked
-              </Badge>
-            ) : null}
-          </button>
-
-          {/* Access Grants */}
-          <button
-            type="button"
-            onClick={() => onSelectView('grants')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === 'grants'
-                ? 'bg-primary/10 text-primary font-semibold'
-                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <ShieldCheck className="size-4 text-foreground" />
-              <span>Access Grants</span>
-            </div>
-            {pendingGrantsCount > 0 && (
-              <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-bold">
-                {pendingGrantsCount}
+            {hospitalsCount > 0 && (
+              <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground">
+                {hospitalsCount}
               </Badge>
             )}
           </button>
 
-          {/* AI Copilot (Slice 4) */}
+          {/* Cross-Hospital Audit Log */}
           <button
             type="button"
-            onClick={() => onSelectView('copilot')}
+            onClick={() => onSelectTab('audit')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === 'copilot'
+              activeTab === 'audit'
                 ? 'bg-primary/10 text-primary font-semibold'
                 : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Sparkles className="size-4 text-foreground" />
-              <span>AI Copilot [RAG]</span>
+              <FileText className="size-4 text-foreground" />
+              <span>Access & Audit Log</span>
             </div>
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground uppercase">
-              Soon
-            </span>
+            {disputedCount > 0 ? (
+              <Badge variant="destructive" className="text-[10px] py-0 px-1.5 font-bold gap-1">
+                <AlertTriangle className="size-2.5" />
+                <span>{disputedCount}</span>
+              </Badge>
+            ) : null}
           </button>
         </div>
       </div>
 
-      {/* 3. Bottom: Accessibility & Theme Dropdown */}
+      {/* 3. Bottom: Theme & Accessibility */}
       <div className="pt-4 border-t border-border/60">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

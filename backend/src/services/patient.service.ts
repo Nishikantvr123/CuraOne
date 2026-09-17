@@ -5,7 +5,7 @@ import {
   clinicalEvents, 
   hospitals, 
   doctors, 
-  accessGrants 
+  accessRequests 
 } from '../db/schema';
 import { eq, and, or, ilike, isNull, gt, desc, sql, count } from 'drizzle-orm';
 
@@ -165,18 +165,18 @@ export async function getTimelineForProvider(patientId: string, requestingHospit
   const now = new Date();
   const approvedGrants = await db
     .select({
-      id: accessGrants.id,
-      targetHospitalId: accessGrants.targetHospitalId,
-      expiresAt: accessGrants.expiresAt,
-      purpose: accessGrants.purpose,
+      id: accessRequests.id,
+      targetHospitalId: accessRequests.targetHospitalId,
+      expiresAt: accessRequests.expiresAt,
+      purpose: accessRequests.purpose,
     })
-    .from(accessGrants)
+    .from(accessRequests)
     .where(
       and(
-        eq(accessGrants.patientId, patientId),
-        eq(accessGrants.requestingHospitalId, requestingHospitalId),
-        eq(accessGrants.status, 'APPROVED'),
-        or(isNull(accessGrants.expiresAt), gt(accessGrants.expiresAt, now))
+        eq(accessRequests.patientId, patientId),
+        eq(accessRequests.requestingHospitalId, requestingHospitalId),
+        eq(accessRequests.status, 'APPROVED'),
+        or(isNull(accessRequests.expiresAt), gt(accessRequests.expiresAt, now))
       )
     );
 

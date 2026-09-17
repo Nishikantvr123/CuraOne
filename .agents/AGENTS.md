@@ -38,7 +38,10 @@ Detailed implementation rules are modularized in the `.agents/rules/` directory:
 * [x] **Vertical Slice 1 (Frontend Foundation & Auth)**: Vite 8 + React 19 + Tailwind v4 + shadcn radix-nova, object-based router, TanStack Query, Axios JWT interceptors, one-click demo role switchers, and session guarding.
 * [x] **Patient Directory & Longitudinal Timeline (Backend)**: Patient search, timeline aggregation, and hospital-scoped record access (Locked vs Unlocked).
 * [x] **Cross-Hospital Authorization (Access Grants)**: Request, approval/rejection, expiration, and revocation state machine with automatic timeline unlocking.
-* [ ] **Semantic Retrieval & RAG Pipeline**: Narrative clinical chunking, Gemini embeddings, gated pgvector search, LLM synthesis with citations.
+* [x] **Vertical Slice 2 (Doctor Clinical Workstation UI)**: Facility jurisdiction sidebar, theme dropdown, patient search directory, longitudinal timeline with locked/unlocked cards, encounter detail modal, live visit logging modal, and cross-hospital access grant modal.
+* [x] **Vertical Slice 2.5 (Hospital Admin Workstation UI)**: Institutional node sidebar, medical staff directory with doctor provisioning modal, separated Outbound Doctor Requests and Inbound Record Disclosures with status filter pills (All, Pending, Approved, Expired, Revoked), and facility node info.
+* [x] **Vertical Slice 3 (Patient Consent & Identity Portal)**: Normalized Dual-Key authorization engine (`access_requests`, `patient_consents`, `hospital_clearances`), 100% unlocked sovereign patient timeline, consent request inbox, Emergency Break-Glass override with 24-hour clamp, and retrospective dispute escalation loop.
+* [ ] **Vertical Slice 4 (Semantic Retrieval & RAG Pipeline)**: Narrative clinical chunking, Gemini embeddings, gated pgvector search, LLM synthesis with citations.
 
 ---
 

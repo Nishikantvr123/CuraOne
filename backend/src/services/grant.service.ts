@@ -1,5 +1,12 @@
 import { db } from '../db';
-import { accessGrants, patients, hospitals, doctors } from '../db/schema';
+import {
+  accessRequests,
+  patientConsents,
+  hospitalClearances,
+  patients,
+  hospitals,
+  doctors,
+} from '../db/schema';
 import { eq, and, or, desc, isNull, gt } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { AuthUserPayload } from '../types/auth.types';
@@ -11,6 +18,8 @@ export interface CreateGrantParams {
   targetHospitalId: string;
   purpose: string;
   durationDays?: number;
+  isBreakGlass?: boolean;
+  breakGlassAttestation?: string;
 }
 
 export type GrantStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED' | 'EXPIRED';
@@ -21,11 +30,15 @@ const targetHospitals = alias(hospitals, 'target_hospital');
 
 /**
  * 1. Doctor creates a new Access Grant request for an external hospital's records
+ * Standard Request: creates PENDING patientConsent and PENDING hospitalClearance
+ * Break-Glass Emergency Request: creates BYPASSED_BREAK_GLASS patientConsent, APPROVED clearance, and 24h clamp
  */
 export async function createGrantRequest(params: CreateGrantParams) {
   // Guard 1: Cannot request your own custodial hospital
   if (params.requestingHospitalId === params.targetHospitalId) {
-    const err: any = new Error('Cannot request an access grant for your own custodial hospital (records already accessible)');
+    const err: any = new Error(
+      'Cannot request an access grant for your own custodial hospital (records already accessible)'
+    );
     err.statusCode = 400;
     throw err;
   }
@@ -56,117 +69,205 @@ export async function createGrantRequest(params: CreateGrantParams) {
     throw err;
   }
 
-  // Guard 4: Check if an active or pending grant already exists
+  // Guard 4: Check if an active or pending request already exists
   const now = new Date();
-  const [existingGrant] = await db
-    .select({ id: accessGrants.id, status: accessGrants.status })
-    .from(accessGrants)
+  const [existingRequest] = await db
+    .select({ id: accessRequests.id, status: accessRequests.status })
+    .from(accessRequests)
     .where(
       and(
-        eq(accessGrants.patientId, params.patientId),
-        eq(accessGrants.requestingHospitalId, params.requestingHospitalId),
-        eq(accessGrants.targetHospitalId, params.targetHospitalId),
+        eq(accessRequests.patientId, params.patientId),
+        eq(accessRequests.requestingHospitalId, params.requestingHospitalId),
+        eq(accessRequests.targetHospitalId, params.targetHospitalId),
         or(
-          eq(accessGrants.status, 'PENDING'),
+          eq(accessRequests.status, 'PENDING'),
           and(
-            eq(accessGrants.status, 'APPROVED'),
-            or(isNull(accessGrants.expiresAt), gt(accessGrants.expiresAt, now))
+            eq(accessRequests.status, 'APPROVED'),
+            or(isNull(accessRequests.expiresAt), gt(accessRequests.expiresAt, now))
           )
         )
       )
     )
     .limit(1);
 
-  if (existingGrant) {
+  if (existingRequest) {
     const err: any = new Error(
-      `An access grant request is already ${existingGrant.status} for this patient and hospital`
+      `An access request is already ${existingRequest.status} for this patient and hospital`
     );
     err.statusCode = 409;
     throw err;
   }
 
-  const durationDays = params.durationDays || 7;
+  const isBreakGlass = Boolean(params.isBreakGlass);
+  // Break-glass is strictly clamped to 24 hours; normal request defaults to 7 days
+  const durationDays = isBreakGlass ? 1 : params.durationDays || 7;
   const initialExpiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
 
-  const [created] = await db
-    .insert(accessGrants)
+  // 1. Insert master access request
+  const [createdRequest] = await db
+    .insert(accessRequests)
     .values({
       patientId: params.patientId,
       requestingDoctorId: params.requestingDoctorId,
       requestingHospitalId: params.requestingHospitalId,
       targetHospitalId: params.targetHospitalId,
-      status: 'PENDING',
       purpose: params.purpose,
+      status: isBreakGlass ? 'APPROVED' : 'PENDING',
+      isBreakGlass: isBreakGlass,
+      breakGlassAttestation: isBreakGlass
+        ? params.breakGlassAttestation || 'Emergency override: Patient incapacitated in acute care'
+        : null,
       expiresAt: initialExpiresAt,
     })
     .returning();
 
+  // 2. Insert Key 1: Patient Consent
+  const [createdConsent] = await db
+    .insert(patientConsents)
+    .values({
+      requestId: createdRequest.id,
+      patientId: params.patientId,
+      status: isBreakGlass ? 'BYPASSED_BREAK_GLASS' : 'PENDING',
+      consentedAt: isBreakGlass ? now : null,
+      patientNotes: isBreakGlass ? 'Emergency clinical override by attending physician' : null,
+    })
+    .returning();
+
+  // 3. Insert Key 2: Custodial Hospital Clearance
+  const [createdClearance] = await db
+    .insert(hospitalClearances)
+    .values({
+      requestId: createdRequest.id,
+      targetHospitalId: params.targetHospitalId,
+      status: isBreakGlass ? 'APPROVED' : 'PENDING',
+      clearedAt: isBreakGlass ? now : null,
+      reviewedByEmail: isBreakGlass ? 'system.breakglass@curaone.health' : null,
+    })
+    .returning();
+
   return {
-    grant: created,
+    grant: {
+      ...createdRequest,
+      patientConsent: createdConsent,
+      hospitalClearance: createdClearance,
+    },
     targetHospital: targetHosp,
   };
 }
 
 /**
- * 2. List grants automatically filtered based on user role
+ * 2. List grants automatically filtered based on user role with joined child tables
  */
 export async function listGrants(user: AuthUserPayload, statusFilter?: string) {
   let roleCondition;
 
   if (user.role === 'PATIENT') {
-    // Patient sees all grant requests involving their own body/records
-    roleCondition = eq(accessGrants.patientId, user.id);
+    // Patient sees requests involving their own records
+    roleCondition = eq(accessRequests.patientId, user.id);
   } else if (user.role === 'DOCTOR') {
-    // Doctor sees requests they or their hospital made
+    // Doctor sees requests they or their affiliated hospital made
     roleCondition = or(
-      eq(accessGrants.requestingDoctorId, user.id),
-      user.hospitalId ? eq(accessGrants.requestingHospitalId, user.hospitalId) : undefined
+      eq(accessRequests.requestingDoctorId, user.id),
+      user.hospitalId ? eq(accessRequests.requestingHospitalId, user.hospitalId) : undefined
     );
   } else if (user.role === 'HOSPITAL') {
     // Hospital admin sees requests where their hospital is requester OR target custodian
     roleCondition = or(
-      eq(accessGrants.requestingHospitalId, user.id),
-      eq(accessGrants.targetHospitalId, user.id)
+      eq(accessRequests.requestingHospitalId, user.id),
+      eq(accessRequests.targetHospitalId, user.id)
     );
   }
 
   const whereConditions = [];
   if (roleCondition) whereConditions.push(roleCondition);
-  if (statusFilter) whereConditions.push(eq(accessGrants.status, statusFilter.toUpperCase()));
+  if (statusFilter) whereConditions.push(eq(accessRequests.status, statusFilter.toUpperCase()));
 
   const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
-  const grantsList = await db
+  const rows = await db
     .select({
-      id: accessGrants.id,
-      patientId: accessGrants.patientId,
+      id: accessRequests.id,
+      patientId: accessRequests.patientId,
       patientFirstName: patients.firstName,
       patientLastName: patients.lastName,
       patientEmail: patients.email,
-      requestingDoctorId: accessGrants.requestingDoctorId,
+      requestingDoctorId: accessRequests.requestingDoctorId,
       requestingDoctorName: doctors.name,
-      requestingHospitalId: accessGrants.requestingHospitalId,
+      requestingHospitalId: accessRequests.requestingHospitalId,
       requestingHospitalName: requestingHospitals.name,
-      targetHospitalId: accessGrants.targetHospitalId,
+      targetHospitalId: accessRequests.targetHospitalId,
       targetHospitalName: targetHospitals.name,
-      status: accessGrants.status,
-      purpose: accessGrants.purpose,
-      createdAt: accessGrants.createdAt,
-      expiresAt: accessGrants.expiresAt,
-      revokedAt: accessGrants.revokedAt,
+      status: accessRequests.status,
+      purpose: accessRequests.purpose,
+      isBreakGlass: accessRequests.isBreakGlass,
+      breakGlassAttestation: accessRequests.breakGlassAttestation,
+      createdAt: accessRequests.createdAt,
+      expiresAt: accessRequests.expiresAt,
+      revokedAt: accessRequests.revokedAt,
+      // Key 1: Patient Consent
+      consentId: patientConsents.id,
+      consentStatus: patientConsents.status,
+      consentedAt: patientConsents.consentedAt,
+      patientNotes: patientConsents.patientNotes,
+      isDisputed: patientConsents.isDisputed,
+      disputeReason: patientConsents.disputeReason,
+      disputedAt: patientConsents.disputedAt,
+      // Key 2: Hospital Clearance
+      clearanceId: hospitalClearances.id,
+      clearanceStatus: hospitalClearances.status,
+      reviewedByEmail: hospitalClearances.reviewedByEmail,
+      clearedAt: hospitalClearances.clearedAt,
+      rejectionReason: hospitalClearances.rejectionReason,
+      flaggedForHostReview: hospitalClearances.flaggedForHostReview,
+      hostReviewNotes: hospitalClearances.hostReviewNotes,
     })
-    .from(accessGrants)
-    .leftJoin(patients, eq(accessGrants.patientId, patients.id))
-    .leftJoin(doctors, eq(accessGrants.requestingDoctorId, doctors.id))
-    .leftJoin(requestingHospitals, eq(accessGrants.requestingHospitalId, requestingHospitals.id))
-    .leftJoin(targetHospitals, eq(accessGrants.targetHospitalId, targetHospitals.id))
+    .from(accessRequests)
+    .leftJoin(patientConsents, eq(accessRequests.id, patientConsents.requestId))
+    .leftJoin(hospitalClearances, eq(accessRequests.id, hospitalClearances.requestId))
+    .leftJoin(patients, eq(accessRequests.patientId, patients.id))
+    .leftJoin(doctors, eq(accessRequests.requestingDoctorId, doctors.id))
+    .leftJoin(requestingHospitals, eq(accessRequests.requestingHospitalId, requestingHospitals.id))
+    .leftJoin(targetHospitals, eq(accessRequests.targetHospitalId, targetHospitals.id))
     .where(whereClause)
-    .orderBy(desc(accessGrants.createdAt));
+    .orderBy(desc(accessRequests.createdAt));
 
-  return grantsList.map((g) => ({
-    ...g,
-    patientName: `${g.patientFirstName || ''} ${g.patientLastName || ''}`.trim(),
-    isExpired: g.expiresAt ? new Date(g.expiresAt) < new Date() : false,
+  return rows.map((r) => ({
+    id: r.id,
+    patientId: r.patientId,
+    patientName: `${r.patientFirstName || ''} ${r.patientLastName || ''}`.trim(),
+    patientEmail: r.patientEmail,
+    requestingDoctorId: r.requestingDoctorId,
+    requestingDoctorName: r.requestingDoctorName,
+    requestingHospitalId: r.requestingHospitalId,
+    requestingHospitalName: r.requestingHospitalName,
+    targetHospitalId: r.targetHospitalId,
+    targetHospitalName: r.targetHospitalName,
+    purpose: r.purpose,
+    status: r.status,
+    isBreakGlass: r.isBreakGlass,
+    breakGlassAttestation: r.breakGlassAttestation,
+    createdAt: r.createdAt,
+    expiresAt: r.expiresAt,
+    revokedAt: r.revokedAt,
+    isExpired: r.expiresAt ? new Date(r.expiresAt) < new Date() : false,
+    patientConsent: {
+      id: r.consentId,
+      status: r.consentStatus || 'PENDING',
+      consentedAt: r.consentedAt,
+      patientNotes: r.patientNotes,
+      isDisputed: Boolean(r.isDisputed),
+      disputeReason: r.disputeReason,
+      disputedAt: r.disputedAt,
+    },
+    hospitalClearance: {
+      id: r.clearanceId,
+      status: r.clearanceStatus || 'PENDING',
+      reviewedByEmail: r.reviewedByEmail,
+      clearedAt: r.clearedAt,
+      rejectionReason: r.rejectionReason,
+      flaggedForHostReview: Boolean(r.flaggedForHostReview),
+      hostReviewNotes: r.hostReviewNotes,
+    },
   }));
 }
 
@@ -174,34 +275,54 @@ export async function listGrants(user: AuthUserPayload, statusFilter?: string) {
  * 3. Get single grant by ID with authorization verification
  */
 export async function getGrantById(grantId: string, user: AuthUserPayload) {
-  const [grant] = await db
+  const [row] = await db
     .select({
-      id: accessGrants.id,
-      patientId: accessGrants.patientId,
+      id: accessRequests.id,
+      patientId: accessRequests.patientId,
       patientFirstName: patients.firstName,
       patientLastName: patients.lastName,
       patientEmail: patients.email,
-      requestingDoctorId: accessGrants.requestingDoctorId,
+      requestingDoctorId: accessRequests.requestingDoctorId,
       requestingDoctorName: doctors.name,
-      requestingHospitalId: accessGrants.requestingHospitalId,
+      requestingHospitalId: accessRequests.requestingHospitalId,
       requestingHospitalName: requestingHospitals.name,
-      targetHospitalId: accessGrants.targetHospitalId,
+      targetHospitalId: accessRequests.targetHospitalId,
       targetHospitalName: targetHospitals.name,
-      status: accessGrants.status,
-      purpose: accessGrants.purpose,
-      createdAt: accessGrants.createdAt,
-      expiresAt: accessGrants.expiresAt,
-      revokedAt: accessGrants.revokedAt,
+      status: accessRequests.status,
+      purpose: accessRequests.purpose,
+      isBreakGlass: accessRequests.isBreakGlass,
+      breakGlassAttestation: accessRequests.breakGlassAttestation,
+      createdAt: accessRequests.createdAt,
+      expiresAt: accessRequests.expiresAt,
+      revokedAt: accessRequests.revokedAt,
+      // Key 1
+      consentId: patientConsents.id,
+      consentStatus: patientConsents.status,
+      consentedAt: patientConsents.consentedAt,
+      patientNotes: patientConsents.patientNotes,
+      isDisputed: patientConsents.isDisputed,
+      disputeReason: patientConsents.disputeReason,
+      disputedAt: patientConsents.disputedAt,
+      // Key 2
+      clearanceId: hospitalClearances.id,
+      clearanceStatus: hospitalClearances.status,
+      reviewedByEmail: hospitalClearances.reviewedByEmail,
+      clearedAt: hospitalClearances.clearedAt,
+      rejectionReason: hospitalClearances.rejectionReason,
+      flaggedForHostReview: hospitalClearances.flaggedForHostReview,
+      hostReviewNotes: hospitalClearances.hostReviewNotes,
     })
-    .from(accessGrants)
-    .leftJoin(patients, eq(accessGrants.patientId, patients.id))
-    .leftJoin(doctors, eq(accessGrants.requestingDoctorId, doctors.id))
-    .leftJoin(requestingHospitals, eq(accessGrants.requestingHospitalId, requestingHospitals.id))
-    .leftJoin(targetHospitals, eq(accessGrants.targetHospitalId, targetHospitals.id))
-    .where(eq(accessGrants.id, grantId))
+    .from(accessRequests)
+    .leftJoin(patientConsents, eq(accessRequests.id, patientConsents.requestId))
+    .leftJoin(hospitalClearances, eq(accessRequests.id, hospitalClearances.requestId))
+    .leftJoin(patients, eq(accessRequests.patientId, patients.id))
+    .leftJoin(doctors, eq(accessRequests.requestingDoctorId, doctors.id))
+    .leftJoin(requestingHospitals, eq(accessRequests.requestingHospitalId, requestingHospitals.id))
+    .leftJoin(targetHospitals, eq(accessRequests.targetHospitalId, targetHospitals.id))
+    .where(eq(accessRequests.id, grantId))
     .limit(1);
 
-  if (!grant) {
+  if (!row) {
     const err: any = new Error('Access grant not found');
     err.statusCode = 404;
     throw err;
@@ -209,9 +330,13 @@ export async function getGrantById(grantId: string, user: AuthUserPayload) {
 
   // Access check
   if (
-    user.role === 'PATIENT' && grant.patientId !== user.id ||
-    user.role === 'DOCTOR' && grant.requestingDoctorId !== user.id && grant.requestingHospitalId !== user.hospitalId ||
-    user.role === 'HOSPITAL' && grant.requestingHospitalId !== user.id && grant.targetHospitalId !== user.id
+    (user.role === 'PATIENT' && row.patientId !== user.id) ||
+    (user.role === 'DOCTOR' &&
+      row.requestingDoctorId !== user.id &&
+      row.requestingHospitalId !== user.hospitalId) ||
+    (user.role === 'HOSPITAL' &&
+      row.requestingHospitalId !== user.id &&
+      row.targetHospitalId !== user.id)
   ) {
     const err: any = new Error('Unauthorized to view this access grant');
     err.statusCode = 403;
@@ -219,115 +344,335 @@ export async function getGrantById(grantId: string, user: AuthUserPayload) {
   }
 
   return {
-    ...grant,
-    patientName: `${grant.patientFirstName || ''} ${grant.patientLastName || ''}`.trim(),
-    isExpired: grant.expiresAt ? new Date(grant.expiresAt) < new Date() : false,
+    id: row.id,
+    patientId: row.patientId,
+    patientName: `${row.patientFirstName || ''} ${row.patientLastName || ''}`.trim(),
+    patientEmail: row.patientEmail,
+    requestingDoctorId: row.requestingDoctorId,
+    requestingDoctorName: row.requestingDoctorName,
+    requestingHospitalId: row.requestingHospitalId,
+    requestingHospitalName: row.requestingHospitalName,
+    targetHospitalId: row.targetHospitalId,
+    targetHospitalName: row.targetHospitalName,
+    purpose: row.purpose,
+    status: row.status,
+    isBreakGlass: row.isBreakGlass,
+    breakGlassAttestation: row.breakGlassAttestation,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    revokedAt: row.revokedAt,
+    isExpired: row.expiresAt ? new Date(row.expiresAt) < new Date() : false,
+    patientConsent: {
+      id: row.consentId,
+      status: row.consentStatus || 'PENDING',
+      consentedAt: row.consentedAt,
+      patientNotes: row.patientNotes,
+      isDisputed: Boolean(row.isDisputed),
+      disputeReason: row.disputeReason,
+      disputedAt: row.disputedAt,
+    },
+    hospitalClearance: {
+      id: row.clearanceId,
+      status: row.clearanceStatus || 'PENDING',
+      reviewedByEmail: row.reviewedByEmail,
+      clearedAt: row.clearedAt,
+      rejectionReason: row.rejectionReason,
+      flaggedForHostReview: Boolean(row.flaggedForHostReview),
+      hostReviewNotes: row.hostReviewNotes,
+    },
   };
 }
 
 /**
- * 4. Update grant status (Approve, Reject, Revoke)
+ * 4. Patient updates Key 1 (Sovereign Consent: APPROVE or REJECT)
+ */
+export async function respondToPatientConsent(
+  requestId: string,
+  user: AuthUserPayload,
+  decision: 'APPROVED' | 'REJECTED',
+  notes?: string
+) {
+  if (user.role !== 'PATIENT') {
+    const err: any = new Error('Only patients can grant sovereign consent');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const [reqRecord] = await db
+    .select()
+    .from(accessRequests)
+    .where(eq(accessRequests.id, requestId))
+    .limit(1);
+
+  if (!reqRecord) {
+    const err: any = new Error('Access request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (reqRecord.patientId !== user.id) {
+    const err: any = new Error('Unauthorized to provide consent for another patient');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (reqRecord.status !== 'PENDING') {
+    const err: any = new Error(`Cannot update consent for a request that is ${reqRecord.status}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Update Key 1 (patient_consents)
+  await db
+    .update(patientConsents)
+    .set({
+      status: decision,
+      consentedAt: new Date(),
+      patientNotes: notes || null,
+    })
+    .where(eq(patientConsents.requestId, requestId));
+
+  // Fetch current Key 2 status (hospital_clearances)
+  const [clearance] = await db
+    .select()
+    .from(hospitalClearances)
+    .where(eq(hospitalClearances.requestId, requestId))
+    .limit(1);
+
+  let newMasterStatus = 'PENDING';
+  if (decision === 'REJECTED') {
+    newMasterStatus = 'REJECTED';
+  } else if (decision === 'APPROVED' && clearance && clearance.status === 'APPROVED') {
+    // Both keys turned!
+    newMasterStatus = 'APPROVED';
+  }
+
+  const [updatedRequest] = await db
+    .update(accessRequests)
+    .set({ status: newMasterStatus })
+    .where(eq(accessRequests.id, requestId))
+    .returning();
+
+  return updatedRequest;
+}
+
+/**
+ * 5. Custodial Hospital updates Key 2 (Institutional Clearance: APPROVE or REJECT)
+ */
+export async function respondToHospitalClearance(
+  requestId: string,
+  user: AuthUserPayload,
+  decision: 'APPROVED' | 'REJECTED',
+  notes?: string
+) {
+  if (user.role !== 'HOSPITAL') {
+    const err: any = new Error('Only custodial hospital admins can grant record clearance');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const [reqRecord] = await db
+    .select()
+    .from(accessRequests)
+    .where(eq(accessRequests.id, requestId))
+    .limit(1);
+
+  if (!reqRecord) {
+    const err: any = new Error('Access request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (reqRecord.targetHospitalId !== user.id) {
+    const err: any = new Error('Only the target custodial hospital can approve record clearance');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (reqRecord.status !== 'PENDING') {
+    const err: any = new Error(`Cannot update clearance for a request that is ${reqRecord.status}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Update Key 2 (hospital_clearances)
+  await db
+    .update(hospitalClearances)
+    .set({
+      status: decision,
+      clearedAt: new Date(),
+      reviewedByEmail: user.email,
+      rejectionReason: decision === 'REJECTED' ? notes : null,
+    })
+    .where(eq(hospitalClearances.requestId, requestId));
+
+  // Fetch current Key 1 status (patient_consents)
+  const [consent] = await db
+    .select()
+    .from(patientConsents)
+    .where(eq(patientConsents.requestId, requestId))
+    .limit(1);
+
+  let newMasterStatus = 'PENDING';
+  if (decision === 'REJECTED') {
+    newMasterStatus = 'REJECTED';
+  } else if (
+    decision === 'APPROVED' &&
+    consent &&
+    (consent.status === 'APPROVED' || consent.status === 'BYPASSED_BREAK_GLASS')
+  ) {
+    // Both keys turned!
+    newMasterStatus = 'APPROVED';
+  }
+
+  const [updatedRequest] = await db
+    .update(accessRequests)
+    .set({ status: newMasterStatus })
+    .where(eq(accessRequests.id, requestId))
+    .returning();
+
+  return updatedRequest;
+}
+
+/**
+ * 6. Revoke an active grant (Patient, Doctor, or Hospital)
+ */
+export async function revokeAccessRequest(requestId: string, user: AuthUserPayload) {
+  const [reqRecord] = await db
+    .select()
+    .from(accessRequests)
+    .where(eq(accessRequests.id, requestId))
+    .limit(1);
+
+  if (!reqRecord) {
+    const err: any = new Error('Access request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  // Auth check
+  const isPatientOwner = user.role === 'PATIENT' && reqRecord.patientId === user.id;
+  const isDoctorOwner =
+    user.role === 'DOCTOR' &&
+    (reqRecord.requestingDoctorId === user.id || reqRecord.requestingHospitalId === user.hospitalId);
+  const isHospitalParty =
+    user.role === 'HOSPITAL' &&
+    (reqRecord.requestingHospitalId === user.id || reqRecord.targetHospitalId === user.id);
+
+  if (!isPatientOwner && !isDoctorOwner && !isHospitalParty) {
+    const err: any = new Error('Unauthorized to revoke this access grant');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (reqRecord.status === 'REVOKED') {
+    return reqRecord;
+  }
+
+  const [revoked] = await db
+    .update(accessRequests)
+    .set({
+      status: 'REVOKED',
+      revokedAt: new Date(),
+    })
+    .where(eq(accessRequests.id, requestId))
+    .returning();
+
+  return revoked;
+}
+
+/**
+ * 7. Flag Break-Glass or Suspicious Access Dispute (Patient or Target Hospital)
+ * Triggers host hospital review notification
+ */
+export async function flagDisputeIncident(
+  requestId: string,
+  user: AuthUserPayload,
+  reason: string
+) {
+  const [reqRecord] = await db
+    .select()
+    .from(accessRequests)
+    .where(eq(accessRequests.id, requestId))
+    .limit(1);
+
+  if (!reqRecord) {
+    const err: any = new Error('Access request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const now = new Date();
+
+  if (user.role === 'PATIENT') {
+    if (reqRecord.patientId !== user.id) {
+      const err: any = new Error('Unauthorized to flag disputes for another patient');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    await db
+      .update(patientConsents)
+      .set({
+        isDisputed: true,
+        disputeReason: reason,
+        disputedAt: now,
+      })
+      .where(eq(patientConsents.requestId, requestId));
+
+    // Also flag custodial review to alert the doctor's host hospital
+    await db
+      .update(hospitalClearances)
+      .set({
+        flaggedForHostReview: true,
+        hostReviewNotes: `Patient Dispute: ${reason}`,
+      })
+      .where(eq(hospitalClearances.requestId, requestId));
+  } else if (user.role === 'HOSPITAL') {
+    if (reqRecord.targetHospitalId !== user.id) {
+      const err: any = new Error('Only the custodial hospital can flag peer review incidents');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    await db
+      .update(hospitalClearances)
+      .set({
+        flaggedForHostReview: true,
+        hostReviewNotes: `Target Custodian Flag: ${reason}`,
+      })
+      .where(eq(hospitalClearances.requestId, requestId));
+  } else {
+    const err: any = new Error('Only patients or custodial hospitals can flag access disputes');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  return { message: 'Incident flagged for bilateral host hospital peer review', requestId };
+}
+
+/**
+ * 8. Backward-compatible updateGrantStatus
  */
 export async function updateGrantStatus(
   grantId: string,
   user: AuthUserPayload,
   newStatus: 'APPROVED' | 'REJECTED' | 'REVOKED',
-  durationDays?: number
+  _durationDays?: number
 ) {
-  const [existing] = await db
-    .select()
-    .from(accessGrants)
-    .where(eq(accessGrants.id, grantId))
-    .limit(1);
-
-  if (!existing) {
-    const err: any = new Error('Access grant not found');
-    err.statusCode = 404;
-    throw err;
+  if (newStatus === 'REVOKED') {
+    return revokeAccessRequest(grantId, user);
   }
 
-  // Permission logic based on role
   if (user.role === 'PATIENT') {
-    // Patient owns the record -> must be the patient for this grant
-    if (existing.patientId !== user.id) {
-      const err: any = new Error('You do not have authorization to update consent for this patient');
-      err.statusCode = 403;
-      throw err;
-    }
-
-    if (newStatus === 'APPROVED') {
-      if (existing.status !== 'PENDING') {
-        const err: any = new Error(`Cannot approve a grant that is currently ${existing.status}`);
-        err.statusCode = 400;
-        throw err;
-      }
-      const days = durationDays || 7;
-      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
-      const [updated] = await db
-        .update(accessGrants)
-        .set({ status: 'APPROVED', expiresAt })
-        .where(eq(accessGrants.id, grantId))
-        .returning();
-
-      return updated;
-    }
-
-    if (newStatus === 'REJECTED') {
-      if (existing.status !== 'PENDING') {
-        const err: any = new Error(`Cannot reject a grant that is currently ${existing.status}`);
-        err.statusCode = 400;
-        throw err;
-      }
-
-      const [updated] = await db
-        .update(accessGrants)
-        .set({ status: 'REJECTED' })
-        .where(eq(accessGrants.id, grantId))
-        .returning();
-
-      return updated;
-    }
-
-    if (newStatus === 'REVOKED') {
-      if (existing.status !== 'APPROVED') {
-        const err: any = new Error(`Cannot revoke a grant that is currently ${existing.status}`);
-        err.statusCode = 400;
-        throw err;
-      }
-
-      const [updated] = await db
-        .update(accessGrants)
-        .set({ status: 'REVOKED', revokedAt: new Date() })
-        .where(eq(accessGrants.id, grantId))
-        .returning();
-
-      return updated;
-    }
-  } else if (user.role === 'DOCTOR') {
-    // Doctor can only REVOKE / cancel their own requested grant
-    if (existing.requestingDoctorId !== user.id && existing.requestingHospitalId !== user.hospitalId) {
-      const err: any = new Error('You can only cancel/revoke grants requested by yourself or your facility');
-      err.statusCode = 403;
-      throw err;
-    }
-
-    if (newStatus !== 'REVOKED') {
-      const err: any = new Error('Doctors can only revoke/cancel access grants. Only patients can approve or reject.');
-      err.statusCode = 403;
-      throw err;
-    }
-
-    const [updated] = await db
-      .update(accessGrants)
-      .set({ status: 'REVOKED', revokedAt: new Date() })
-      .where(eq(accessGrants.id, grantId))
-      .returning();
-
-    return updated;
-  } else {
-    const err: any = new Error('Unauthorized to modify access grants');
-    err.statusCode = 403;
-    throw err;
+    return respondToPatientConsent(grantId, user, newStatus);
   }
+
+  if (user.role === 'HOSPITAL') {
+    return respondToHospitalClearance(grantId, user, newStatus);
+  }
+
+  const err: any = new Error('Unauthorized to update grant status');
+  err.statusCode = 403;
+  throw err;
 }

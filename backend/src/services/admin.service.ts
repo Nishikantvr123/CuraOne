@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
+import { count } from 'drizzle-orm';
 import { db } from '../db';
-import { hospitals } from '../db/schema';
+import { hospitals, doctors } from '../db/schema';
 import { isEmailTaken } from './auth.service';
 
 export async function createHospital(data: {
@@ -45,7 +46,7 @@ export async function createHospital(data: {
 }
 
 export async function listHospitals() {
-  const results = await db
+  const hospitalList = await db
     .select({
       id: hospitals.id,
       name: hospitals.name,
@@ -58,5 +59,24 @@ export async function listHospitals() {
     .from(hospitals)
     .orderBy(hospitals.name);
 
-  return results;
+  // Attach doctor counts
+  const doctorCounts = await db
+    .select({
+      hospitalId: doctors.hospitalId,
+      count: count(doctors.id),
+    })
+    .from(doctors)
+    .groupBy(doctors.hospitalId);
+
+  const countMap = new Map<string, number>();
+  for (const dc of doctorCounts) {
+    if (dc.hospitalId) {
+      countMap.set(dc.hospitalId, Number(dc.count));
+    }
+  }
+
+  return hospitalList.map((h) => ({
+    ...h,
+    doctorsCount: countMap.get(h.id) || 0,
+  }));
 }

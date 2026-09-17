@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, timestamp, date, vector } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, varchar, timestamp, date, vector, boolean } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // 1. HOSPITALS (from organizations.csv)
@@ -17,6 +17,9 @@ export const hospitalsRelations = relations(hospitals, ({ many }) => ({
   doctors: many(doctors),
   encounters: many(encounters),
   clinicalEvents: many(clinicalEvents),
+  requestedAccess: many(accessRequests, { relationName: 'requestingHospital' }),
+  custodialAccess: many(accessRequests, { relationName: 'targetHospital' }),
+  clearances: many(hospitalClearances),
 }));
 
 // 2. DOCTORS (from providers.csv)
@@ -39,7 +42,7 @@ export const doctorsRelations = relations(doctors, ({ one, many }) => ({
     references: [hospitals.id],
   }),
   encounters: many(encounters),
-  accessGrants: many(accessGrants),
+  accessRequests: many(accessRequests),
 }));
 
 // 3. PATIENTS (from patients.csv)
@@ -59,7 +62,8 @@ export const patients = pgTable('patients', {
 export const patientsRelations = relations(patients, ({ many }) => ({
   encounters: many(encounters),
   clinicalEvents: many(clinicalEvents),
-  accessGrants: many(accessGrants),
+  accessRequests: many(accessRequests),
+  patientConsents: many(patientConsents),
   embeddings: many(clinicalEmbeddings),
 }));
 
@@ -131,8 +135,8 @@ export const clinicalEventsRelations = relations(clinicalEvents, ({ one }) => ({
   }),
 }));
 
-// 6. ACCESS GRANTS (Cross-hospital authorization model)
-export const accessGrants = pgTable('access_grants', {
+// 6. ACCESS REQUESTS (Master cross-hospital query record)
+export const accessRequests = pgTable('access_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   patientId: uuid('patient_id')
     .references(() => patients.id, { onDelete: 'cascade' })
@@ -146,31 +150,107 @@ export const accessGrants = pgTable('access_grants', {
   targetHospitalId: uuid('target_hospital_id')
     .references(() => hospitals.id, { onDelete: 'cascade' })
     .notNull(),
-  status: varchar('status', { length: 20 }).default('PENDING').notNull(), // 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED' | 'EXPIRED'
   purpose: text('purpose').notNull(),
+  status: varchar('status', { length: 20 }).default('PENDING').notNull(), // 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED' | 'EXPIRED'
+  isBreakGlass: boolean('is_break_glass').default(false).notNull(),
+  breakGlassAttestation: text('break_glass_attestation'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   expiresAt: timestamp('expires_at'),
   revokedAt: timestamp('revoked_at'),
 });
 
-export const accessGrantsRelations = relations(accessGrants, ({ one }) => ({
+// Backward compatibility export alias
+export const accessGrants = accessRequests;
+
+// 6A. PATIENT CONSENTS (Key 1: Sovereign Patient Consent)
+export const patientConsents = pgTable('patient_consents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  requestId: uuid('request_id')
+    .references(() => accessRequests.id, { onDelete: 'cascade' })
+    .notNull(),
+  patientId: uuid('patient_id')
+    .references(() => patients.id, { onDelete: 'cascade' })
+    .notNull(),
+  status: varchar('status', { length: 25 }).default('PENDING').notNull(), // 'PENDING' | 'APPROVED' | 'REJECTED' | 'BYPASSED_BREAK_GLASS'
+  consentedAt: timestamp('consented_at'),
+  patientNotes: text('patient_notes'),
+  isDisputed: boolean('is_disputed').default(false).notNull(),
+  disputeReason: text('dispute_reason'),
+  disputedAt: timestamp('disputed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 6B. HOSPITAL CLEARANCES (Key 2: Custodial Hospital Clearance)
+export const hospitalClearances = pgTable('hospital_clearances', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  requestId: uuid('request_id')
+    .references(() => accessRequests.id, { onDelete: 'cascade' })
+    .notNull(),
+  targetHospitalId: uuid('target_hospital_id')
+    .references(() => hospitals.id, { onDelete: 'cascade' })
+    .notNull(),
+  status: varchar('status', { length: 20 }).default('PENDING').notNull(), // 'PENDING' | 'APPROVED' | 'REJECTED'
+  reviewedByEmail: text('reviewed_by_email'),
+  clearedAt: timestamp('cleared_at'),
+  rejectionReason: text('rejection_reason'),
+  flaggedForHostReview: boolean('flagged_for_host_review').default(false).notNull(),
+  hostReviewNotes: text('host_review_notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const accessRequestsRelations = relations(accessRequests, ({ one }) => ({
   patient: one(patients, {
-    fields: [accessGrants.patientId],
+    fields: [accessRequests.patientId],
     references: [patients.id],
   }),
   requestingDoctor: one(doctors, {
-    fields: [accessGrants.requestingDoctorId],
+    fields: [accessRequests.requestingDoctorId],
     references: [doctors.id],
   }),
   requestingHospital: one(hospitals, {
-    fields: [accessGrants.requestingHospitalId],
+    fields: [accessRequests.requestingHospitalId],
     references: [hospitals.id],
+    relationName: 'requestingHospital',
   }),
   targetHospital: one(hospitals, {
-    fields: [accessGrants.targetHospitalId],
+    fields: [accessRequests.targetHospitalId],
+    references: [hospitals.id],
+    relationName: 'targetHospital',
+  }),
+  patientConsent: one(patientConsents, {
+    fields: [accessRequests.id],
+    references: [patientConsents.requestId],
+  }),
+  hospitalClearance: one(hospitalClearances, {
+    fields: [accessRequests.id],
+    references: [hospitalClearances.requestId],
+  }),
+}));
+
+export const patientConsentsRelations = relations(patientConsents, ({ one }) => ({
+  request: one(accessRequests, {
+    fields: [patientConsents.requestId],
+    references: [accessRequests.id],
+  }),
+  patient: one(patients, {
+    fields: [patientConsents.patientId],
+    references: [patients.id],
+  }),
+}));
+
+export const hospitalClearancesRelations = relations(hospitalClearances, ({ one }) => ({
+  request: one(accessRequests, {
+    fields: [hospitalClearances.requestId],
+    references: [accessRequests.id],
+  }),
+  targetHospital: one(hospitals, {
+    fields: [hospitalClearances.targetHospitalId],
     references: [hospitals.id],
   }),
 }));
+
+// Backward compatibility relations export
+export const accessGrantsRelations = accessRequestsRelations;
 
 // 7. CLINICAL EMBEDDINGS (pgvector store for RAG)
 export const clinicalEmbeddings = pgTable('clinical_embeddings', {

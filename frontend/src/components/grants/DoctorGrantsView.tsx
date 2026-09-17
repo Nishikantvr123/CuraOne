@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import type { GrantItem } from '@/types/grant';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { PaginationControl } from '@/components/ui/pagination-control';
 import { 
   ShieldCheck, 
   Clock, 
@@ -13,24 +15,11 @@ import {
   Building2, 
   User, 
   Loader2,
-  ArrowRight
+  ArrowRight,
+  AlertTriangle,
+  Key
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface GrantItem {
-  id: string;
-  patientId: string;
-  patientFirstName: string;
-  patientLastName: string;
-  patientEmail: string;
-  targetHospitalId: string;
-  targetHospitalName: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
-  purpose: string;
-  createdAt: string;
-  expiresAt?: string | null;
-  revokedAt?: string | null;
-}
 
 interface DoctorGrantsViewProps {
   onSelectPatient: (patientId: string) => void;
@@ -38,6 +27,8 @@ interface DoctorGrantsViewProps {
 
 export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPatient }) => {
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const { data, isLoading, isError, refetch } = useQuery<{ grants: GrantItem[]; count: number }>({
     queryKey: ['doctorGrants'],
@@ -49,7 +40,7 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
 
   const revokeMutation = useMutation({
     mutationFn: async (grantId: string) => {
-      await api.patch(`/grants/${grantId}`, { status: 'REVOKED' });
+      await api.post(`/grants/${grantId}/revoke`);
     },
     onSuccess: () => {
       toast.success('Access grant revoked');
@@ -70,7 +61,7 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Access Grants</h1>
         <p className="text-sm text-muted-foreground">
-          Track cross-hospital patient consent requests and authorized custodial records.
+          Track cross-hospital Dual-Key authorizations (Patient Sovereign Consent + Institutional Clearance).
         </p>
       </div>
 
@@ -96,22 +87,26 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
         </div>
       ) : (
         <div className="space-y-3">
-          {grants.map((grant) => {
+          {grants.slice((page - 1) * pageSize, page * pageSize).map((grant) => {
             const createdDate = new Date(grant.createdAt).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
             });
 
+            const patientConsentStatus = grant.patientConsent?.status || 'PENDING';
+            const hospitalClearanceStatus = grant.hospitalClearance?.status || 'PENDING';
+
             return (
               <Card key={grant.id} className="border-border/60 bg-card/60 shadow-xs">
                 <CardContent className="p-4 sm:p-5 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Overall Master Status */}
                       {grant.status === 'PENDING' && (
                         <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs">
                           <Clock className="size-3 text-amber-600 dark:text-amber-400" />
-                          Pending Patient Consent
+                          Pending Dual-Key Clearance
                         </Badge>
                       )}
                       {grant.status === 'APPROVED' && (
@@ -123,7 +118,7 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
                       {grant.status === 'REJECTED' && (
                         <Badge variant="outline" className="gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 text-xs">
                           <XCircle className="size-3 text-rose-600 dark:text-rose-400" />
-                          Declined by Patient
+                          Declined
                         </Badge>
                       )}
                       {grant.status === 'REVOKED' && (
@@ -132,6 +127,15 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
                           Revoked
                         </Badge>
                       )}
+
+                      {/* Emergency Break-Glass Indicator */}
+                      {grant.isBreakGlass && (
+                        <Badge variant="destructive" className="gap-1 text-[11px] font-semibold animate-pulse">
+                          <AlertTriangle className="size-3" />
+                          Break-Glass Emergency (24h Window)
+                        </Badge>
+                      )}
+
                       <span className="text-xs text-muted-foreground font-mono">Requested {createdDate}</span>
                     </div>
 
@@ -161,10 +165,43 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
                     </div>
                   </div>
 
+                  {/* Dual-Key Independent Status Breakdown */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-muted/20 border border-border/40 rounded-md p-2.5">
+                    <div className="flex items-center justify-between gap-2 pr-2 border-r border-border/40">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Key className="size-3.5 text-primary" />
+                        <span className="font-medium">Key 1: Patient Consent:</span>
+                      </div>
+                      <span className={`font-semibold ${
+                        patientConsentStatus === 'APPROVED' ? 'text-emerald-600 dark:text-emerald-400' :
+                        patientConsentStatus === 'BYPASSED_BREAK_GLASS' ? 'text-amber-600 dark:text-amber-400' :
+                        patientConsentStatus === 'REJECTED' ? 'text-destructive' : 'text-amber-500'
+                      }`}>
+                        {patientConsentStatus === 'APPROVED' ? 'Granted ✓' :
+                         patientConsentStatus === 'BYPASSED_BREAK_GLASS' ? 'Emergency Bypass ⚠️' :
+                         patientConsentStatus === 'REJECTED' ? 'Denied ✗' : 'Pending Patient'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pl-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Building2 className="size-3.5 text-primary" />
+                        <span className="font-medium">Key 2: Custodian Clearance:</span>
+                      </div>
+                      <span className={`font-semibold ${
+                        hospitalClearanceStatus === 'APPROVED' ? 'text-emerald-600 dark:text-emerald-400' :
+                        hospitalClearanceStatus === 'REJECTED' ? 'text-destructive' : 'text-amber-500'
+                      }`}>
+                        {hospitalClearanceStatus === 'APPROVED' ? 'Cleared ✓' :
+                         hospitalClearanceStatus === 'REJECTED' ? 'Denied ✗' : 'Pending Hospital'}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-1.5 text-foreground">
                       <User className="size-3.5 text-muted-foreground shrink-0" />
-                      <span className="font-semibold">{grant.patientFirstName} {grant.patientLastName}</span>
+                      <span className="font-semibold">{grant.patientName}</span>
                       <span className="text-muted-foreground">({grant.patientEmail})</span>
                     </div>
 
@@ -184,6 +221,17 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
             );
           })}
         </div>
+      )}
+
+      {grants.length > 0 && (
+        <PaginationControl
+          currentPage={page}
+          totalPages={Math.ceil(grants.length / pageSize)}
+          totalItems={grants.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          itemLabel="grants"
+        />
       )}
     </div>
   );

@@ -67,7 +67,7 @@ async function runSeed() {
   // STEP 0: Clean slate (wipe previous seed data)
   console.log('\n🧹 Clearing existing database tables...');
   await db.execute(
-    sql`TRUNCATE clinical_embeddings, clinical_events, access_grants, encounters, doctors, patients, hospitals, system_admins CASCADE;`
+    sql`TRUNCATE clinical_embeddings, clinical_events, hospital_clearances, patient_consents, access_requests, encounters, doctors, patients, hospitals, system_admins CASCADE;`
   );
   console.log('✅ Tables cleared successfully.');
 

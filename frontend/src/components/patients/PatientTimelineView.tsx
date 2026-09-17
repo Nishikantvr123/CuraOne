@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EncounterDetailModal } from '@/components/patients/EncounterDetailModal';
 import { RecordEncounterModal } from '@/components/patients/RecordEncounterModal';
 import { RequestGrantModal } from '@/components/grants/RequestGrantModal';
+import { PaginationControl } from '@/components/ui/pagination-control';
 import {
   ArrowLeft,
   Lock,
@@ -18,12 +19,15 @@ import {
   Loader2,
   Activity,
   Pill,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  AlertTriangle
 } from 'lucide-react';
 
 interface PatientTimelineViewProps {
   patientId: string;
   onBack: () => void;
+  onNavigateToNewVisit?: () => void;
 }
 
 function calculateAge(birthdateStr: string): number {
@@ -37,13 +41,19 @@ function calculateAge(birthdateStr: string): number {
   return age;
 }
 
-export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patientId, onBack }) => {
+export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ 
+  patientId, 
+  onBack,
+  onNavigateToNewVisit 
+}) => {
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Modals state
   const [selectedEncounter, setSelectedEncounter] = useState<TimelineEncounter | null>(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
-  const [grantRequestTarget, setGrantRequestTarget] = useState<{ id: string; name: string } | null>(null);
+  const [grantRequestTarget, setGrantRequestTarget] = useState<{ id: string; name: string; isEmergency?: boolean } | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery<TimelineResponse>({
     queryKey: ['patientTimeline', patientId],
@@ -91,14 +101,27 @@ export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patien
           <span>Back to Patients</span>
         </Button>
 
-        <Button
-          size="sm"
-          onClick={() => setIsRecordModalOpen(true)}
-          className="gap-2 cursor-pointer font-medium self-start sm:self-auto"
-        >
-          <PlusCircle className="size-4" />
-          <span>Record New Clinical Visit</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onNavigateToNewVisit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNavigateToNewVisit}
+              className="gap-1.5 cursor-pointer text-xs"
+            >
+              <FileText className="size-3.5" />
+              <span>Full Visit Chart</span>
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => setIsRecordModalOpen(true)}
+            className="gap-2 cursor-pointer font-medium"
+          >
+            <PlusCircle className="size-4" />
+            <span>Record New Clinical Visit</span>
+          </Button>
+        </div>
       </div>
 
       {/* 2. Patient Identity Card */}
@@ -146,7 +169,7 @@ export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patien
           </div>
         ) : (
           <div className="space-y-3">
-            {encounters.map((enc) => {
+            {encounters.slice((page - 1) * pageSize, page * pageSize).map((enc) => {
               const formattedDate = new Date(enc.startDate).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -184,15 +207,26 @@ export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patien
                         </p>
                       </div>
 
-                      <div className="shrink-0 pt-2 sm:pt-0">
+                      <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setGrantRequestTarget({ id: enc.hospitalId, name: enc.hospitalName })}
+                          onClick={() => setGrantRequestTarget({ id: enc.hospitalId, name: enc.hospitalName, isEmergency: false })}
                           className="gap-1.5 cursor-pointer text-xs font-medium hover:border-primary/50"
                         >
                           <ShieldCheck className="size-3.5 text-foreground" />
                           <span>Request Access</span>
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setGrantRequestTarget({ id: enc.hospitalId, name: enc.hospitalName, isEmergency: true })}
+                          className="gap-1.5 cursor-pointer text-xs font-semibold text-rose-600 dark:text-rose-400 border-rose-500/40 hover:bg-rose-500/10 hover:border-rose-500 shadow-xs"
+                          title="Activate Emergency Break-Glass Override"
+                        >
+                          <AlertTriangle className="size-3.5 text-rose-600 dark:text-rose-400" />
+                          <span>Break-Glass</span>
                         </Button>
                       </div>
                     </CardContent>
@@ -292,6 +326,17 @@ export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patien
             })}
           </div>
         )}
+
+        {encounters.length > 0 && (
+          <PaginationControl
+            currentPage={page}
+            totalPages={Math.ceil(encounters.length / pageSize)}
+            totalItems={encounters.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            itemLabel="encounters"
+          />
+        )}
       </div>
 
       {/* MODAL 1: Encounter Details Modal */}
@@ -320,6 +365,7 @@ export const PatientTimelineView: React.FC<PatientTimelineViewProps> = ({ patien
           patientName={`${patient.firstName} ${patient.lastName}`}
           targetHospitalId={grantRequestTarget.id}
           targetHospitalName={grantRequestTarget.name}
+          initialBreakGlass={grantRequestTarget.isEmergency}
           isOpen={true}
           onClose={() => setGrantRequestTarget(null)}
           onSuccess={() => {

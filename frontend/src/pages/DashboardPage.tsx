@@ -3,31 +3,38 @@ import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DoctorSidebar } from '@/components/layout/DoctorSidebar';
+import { HospitalSidebar, type HospitalView } from '@/components/layout/HospitalSidebar';
+import { PatientSidebar, type PatientViewTab } from '@/components/layout/PatientSidebar';
 import { PatientSearchDirectory } from '@/components/patients/PatientSearchDirectory';
 import { PatientTimelineView } from '@/components/patients/PatientTimelineView';
+import { NewClinicalVisitView } from '@/components/patients/NewClinicalVisitView';
 import { DoctorGrantsView } from '@/components/grants/DoctorGrantsView';
+import { HospitalDoctorsView } from '@/components/hospital/HospitalDoctorsView';
+import { HospitalOutboundGrantsView } from '@/components/hospital/HospitalOutboundGrantsView';
+import { HospitalInboundGrantsView } from '@/components/hospital/HospitalInboundGrantsView';
+import { HospitalFacilityInfoView } from '@/components/hospital/HospitalFacilityInfoView';
+import { PatientSovereignTimelineView } from '@/components/patient/PatientSovereignTimelineView';
+import { PatientConsentInboxView } from '@/components/patient/PatientConsentInboxView';
+import { PatientSecurityAuditView } from '@/components/patient/PatientSecurityAuditView';
+import { AdminSidebar, type AdminViewTab } from '@/components/layout/AdminSidebar';
+import { AdminHospitalsView } from '@/components/admin/AdminHospitalsView';
+import { AdminAuditView } from '@/components/admin/AdminAuditView';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Building2, 
-  User as UserIcon, 
-  Shield, 
-  Users, 
-  KeyRound, 
-  Sparkles, 
-  CheckCircle2,
-  ArrowRight,
   Bot
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const [sidebarView, setSidebarView] = useState<'patients' | 'grants' | 'copilot'>('patients');
+  const [sidebarView, setSidebarView] = useState<'patients' | 'grants' | 'copilot' | 'new-visit'>('patients');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [hospitalView, setHospitalView] = useState<HospitalView>('doctors');
+  const [patientTab, setPatientTab] = useState<PatientViewTab>('timeline');
+  const [adminTab, setAdminTab] = useState<AdminViewTab>('hospitals');
 
   // Fetch pending grants count for doctor's badge
-  const { data: grantsData } = useQuery<{ grants: any[]; count: number }>({
+  const { data: doctorGrantsData } = useQuery<{ grants: any[]; count: number }>({
     queryKey: ['doctorGrants'],
     queryFn: async () => {
       const res = await api.get('/grants');
@@ -36,7 +43,68 @@ export const DashboardPage: React.FC = () => {
     enabled: user?.role === 'DOCTOR',
   });
 
-  const pendingGrantsCount = grantsData?.grants?.filter((g) => g.status === 'PENDING').length || 0;
+  // Fetch grants for hospital admin's badges
+  const { data: hospitalGrantsData } = useQuery<{ grants: any[]; count: number }>({
+    queryKey: ['hospitalGrants'],
+    queryFn: async () => {
+      const res = await api.get('/grants');
+      return res.data;
+    },
+    enabled: user?.role === 'HOSPITAL',
+  });
+
+  // Fetch grants for patient's badges
+  const { data: patientGrantsData } = useQuery<{ grants: any[]; count: number }>({
+    queryKey: ['patientGrants'],
+    queryFn: async () => {
+      const res = await api.get('/grants');
+      return res.data;
+    },
+    enabled: user?.role === 'PATIENT',
+  });
+
+  // Fetch hospitals for system admin's badge
+  const { data: adminHospitalsData } = useQuery<{ count: number; hospitals: any[] }>({
+    queryKey: ['adminHospitals'],
+    queryFn: async () => {
+      const res = await api.get('/admin/hospitals');
+      return res.data;
+    },
+    enabled: user?.role === 'SYSTEM_ADMIN',
+  });
+
+  // Fetch all grants for system admin's dispute badge
+  const { data: adminAuditData } = useQuery<{ count: number; grants: any[] }>({
+    queryKey: ['adminAuditGrants'],
+    queryFn: async () => {
+      const res = await api.get('/grants');
+      return res.data;
+    },
+    enabled: user?.role === 'SYSTEM_ADMIN',
+  });
+
+  const pendingGrantsCount = doctorGrantsData?.grants?.filter((g) => g.status === 'PENDING').length || 0;
+
+  const currentHospitalId = user?.hospitalId || user?.id;
+  const pendingOutboundCount = hospitalGrantsData?.grants?.filter(
+    (g) => g.requestingHospitalId === currentHospitalId && g.status === 'PENDING'
+  ).length || 0;
+  const activeInboundCount = hospitalGrantsData?.grants?.filter(
+    (g) => g.targetHospitalId === currentHospitalId && g.status === 'APPROVED'
+  ).length || 0;
+
+  const pendingPatientConsentsCount =
+    patientGrantsData?.grants?.filter(
+      (g) => g.patientConsent?.status === 'PENDING' && g.status === 'PENDING'
+    ).length || 0;
+
+  const patientAuditAlertCount =
+    patientGrantsData?.grants?.filter(
+      (g) => g.isBreakGlass && !g.patientConsent?.isDisputed
+    ).length || 0;
+
+  const adminDisputedCount =
+    adminAuditData?.grants?.filter((g) => g.patientConsent?.isDisputed).length || 0;
 
   if (!user) return null;
 
@@ -44,7 +112,6 @@ export const DashboardPage: React.FC = () => {
   if (user.role === 'DOCTOR') {
     return (
       <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
-        {/* Left Sidebar */}
         <DoctorSidebar
           activeView={sidebarView}
           onSelectView={(view) => {
@@ -54,19 +121,30 @@ export const DashboardPage: React.FC = () => {
           pendingGrantsCount={pendingGrantsCount}
         />
 
-        {/* Main Workstation Workspace */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
           {sidebarView === 'patients' && (
             selectedPatientId ? (
               <PatientTimelineView
                 patientId={selectedPatientId}
                 onBack={() => setSelectedPatientId(null)}
+                onNavigateToNewVisit={() => setSidebarView('new-visit')}
               />
             ) : (
               <PatientSearchDirectory
                 onSelectPatient={(id) => setSelectedPatientId(id)}
               />
             )
+          )}
+
+          {sidebarView === 'new-visit' && (
+            <NewClinicalVisitView
+              preselectedPatientId={selectedPatientId}
+              onSelectPatient={(id) => setSelectedPatientId(id)}
+              onViewTimeline={(id) => {
+                setSelectedPatientId(id);
+                setSidebarView('patients');
+              }}
+            />
           )}
 
           {sidebarView === 'grants' && (
@@ -108,7 +186,7 @@ export const DashboardPage: React.FC = () => {
                   <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-2 text-xs">
                     <p className="font-semibold text-foreground">Strict Authorization Rule:</p>
                     <p>
-                      Similarity retrieval is dynamically gated by active <code className="text-foreground font-mono text-xs">access_grants</code>. Records from external hospitals with expired or absent consent grants are never retrieved into the prompt context.
+                      Similarity retrieval is dynamically gated by active <code className="text-foreground font-mono text-xs">access_requests</code>. Records from external hospitals with expired or absent consent grants are never retrieved into the prompt context.
                     </p>
                   </div>
                   <Button
@@ -128,200 +206,61 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  // 2. OTHER ROLES (HOSPITAL, PATIENT, SYSTEM_ADMIN) OVERVIEW
-  return (
-    <div className="container mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 space-y-8">
-      {/* Welcome Banner */}
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 sm:p-8 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                Welcome, {user.name}
-              </h1>
-              <Badge variant="outline" className="text-xs font-semibold uppercase tracking-wider bg-background/80">
-                {user.role}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Connected to CuraOne decentralized cross-hospital research network.
-            </p>
-          </div>
+  // 2. HOSPITAL WORKSTATION LAYOUT
+  if (user.role === 'HOSPITAL') {
+    return (
+      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+        <HospitalSidebar
+          activeView={hospitalView}
+          onSelectView={setHospitalView}
+          pendingOutboundCount={pendingOutboundCount}
+          activeInboundCount={activeInboundCount}
+        />
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-500/20">
-              <CheckCircle2 className="size-3.5" />
-              API Session Live
-            </span>
-          </div>
-        </div>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+          {hospitalView === 'doctors' && <HospitalDoctorsView />}
+          {hospitalView === 'outbound' && <HospitalOutboundGrantsView />}
+          {hospitalView === 'inbound' && <HospitalInboundGrantsView />}
+          {hospitalView === 'facility' && <HospitalFacilityInfoView />}
+        </main>
       </div>
+    );
+  }
 
-      {user.role === 'HOSPITAL' && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border-border/60 shadow-xs">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Hospital Custodianship</CardTitle>
-                <Building2 className="size-4 text-foreground" />
-              </div>
-              <CardDescription>Institutional identity and node status</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Facility Name:</span>
-                <span className="font-medium text-foreground">{user.name}</span>
-              </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Admin Account:</span>
-                <span className="font-medium text-foreground">{user.email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Jurisdiction Node ID:</span>
-                <span className="font-mono text-xs text-foreground truncate max-w-[200px]">{user.id}</span>
-              </div>
-            </CardContent>
-          </Card>
+  // 3. PATIENT SOVEREIGN IDENTITY & CONSENT PORTAL (VERTICAL SLICE 3)
+  if (user.role === 'PATIENT') {
+    return (
+      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+        <PatientSidebar
+          activeTab={patientTab}
+          onTabChange={setPatientTab}
+          pendingConsentCount={pendingPatientConsentsCount}
+          auditAlertCount={patientAuditAlertCount}
+        />
 
-          <Card className="border-border/60 shadow-xs">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Doctor Provisioning</CardTitle>
-                <Users className="size-4 text-foreground" />
-              </div>
-              <CardDescription>Manage authorized medical personnel</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As a hospital administrator, you can provision new attending doctors and assign them to your facility.
-              </p>
-              <div className="mt-4">
-                <Button variant="outline" size="sm" className="gap-2 cursor-pointer">
-                  Manage Medical Staff
-                  <ArrowRight className="size-3.5" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+          {patientTab === 'timeline' && <PatientSovereignTimelineView />}
+          {patientTab === 'consent' && <PatientConsentInboxView />}
+          {patientTab === 'audit' && <PatientSecurityAuditView />}
+        </main>
+      </div>
+    );
+  }
 
-      {user.role === 'PATIENT' && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border-border/60 shadow-xs">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Your Health Identity</CardTitle>
-                <UserIcon className="size-4 text-foreground" />
-              </div>
-              <CardDescription>Longitudinal records custodian summary</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Patient Name:</span>
-                <span className="font-medium text-foreground">{user.name}</span>
-              </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Email:</span>
-                <span className="font-medium text-foreground">{user.email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Patient ID:</span>
-                <span className="font-mono text-xs text-foreground truncate max-w-[200px]">{user.id}</span>
-              </div>
-            </CardContent>
-          </Card>
+  // 4. SYSTEM ADMIN WORKSTATION LAYOUT
+  return (
+    <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+      <AdminSidebar
+        activeTab={adminTab}
+        onSelectTab={setAdminTab}
+        hospitalsCount={adminHospitalsData?.count || adminHospitalsData?.hospitals?.length || 0}
+        disputedCount={adminDisputedCount}
+      />
 
-          <Card className="border-border/60 shadow-xs">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Consent & Access Grants</CardTitle>
-                <KeyRound className="size-4 text-foreground" />
-              </div>
-              <CardDescription>Cross-hospital sharing authorizations</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                You have sovereign control over which external hospitals can access your historical clinical encounters.
-              </p>
-              <div className="mt-4">
-                <Button variant="outline" size="sm" className="gap-2 cursor-pointer">
-                  Review Access Requests
-                  <ArrowRight className="size-3.5" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {user.role === 'SYSTEM_ADMIN' && (
-        <Card className="border-border/60 shadow-xs">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Network Administration</CardTitle>
-              <Shield className="size-4 text-foreground" />
-            </div>
-            <CardDescription>Platform root configuration and hospital provisioning</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              You are logged in as the System Administrator. You can provision new hospital nodes and oversee platform-wide health metrics.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* FYP Research Subsystems Roadmap Card */}
-      <Card className="border-border/60 bg-muted/30 shadow-xs">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">CuraOne Architecture Roadmap</CardTitle>
-          <CardDescription>Current vertical slice progress</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                <CheckCircle2 className="size-4" />
-                Slice 1: Auth & Portals
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                4-role JWT authentication, patient registration, and session routing active.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                <CheckCircle2 className="size-4" />
-                Slice 2: Doctor Workstation
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Search directory, gated longitudinal timeline, record details & live encounters.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <KeyRound className="size-4 text-muted-foreground" />
-                Slice 3: Access Grants Portal
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Patient consent inbox, grant approval/rejection & sovereign audit trail.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Sparkles className="size-4 text-muted-foreground" />
-                Slice 4: Semantic RAG
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Gemini embeddings + pgvector similarity search with source citations.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+        {adminTab === 'hospitals' && <AdminHospitalsView />}
+        {adminTab === 'audit' && <AdminAuditView />}
+      </main>
     </div>
   );
 };

@@ -127,7 +127,7 @@ export const RecordEncounterModal: React.FC<RecordEncounterModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto p-6">
+      <DialogContent className="w-full sm:max-w-2xl max-h-[88vh] overflow-y-auto p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
           <DialogHeader>
             <div className="flex items-center gap-2">
