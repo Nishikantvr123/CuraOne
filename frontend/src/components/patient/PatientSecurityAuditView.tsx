@@ -21,7 +21,10 @@ import {
   Stethoscope, 
   Loader2, 
   CheckCircle2, 
-  FileWarning 
+  FileWarning,
+  Ban,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PaginationControl } from '@/components/ui/pagination-control';
@@ -30,6 +33,9 @@ export const PatientSecurityAuditView: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedGrantForDispute, setSelectedGrantForDispute] = useState<GrantItem | null>(null);
   const [disputeReason, setDisputeReason] = useState('');
+  const [disputeAlsoRevoke, setDisputeAlsoRevoke] = useState(true);
+  const [selectedGrantForRevocation, setSelectedGrantForRevocation] = useState<GrantItem | null>(null);
+  const [revocationReason, setRevocationReason] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -42,15 +48,30 @@ export const PatientSecurityAuditView: React.FC = () => {
   });
 
   const disputeMutation = useMutation({
-    mutationFn: async ({ grantId, reason }: { grantId: string; reason: string }) => {
-      await api.post(`/grants/${grantId}/flag-dispute`, { reason });
+    mutationFn: async ({
+      grantId,
+      reason,
+      alsoRevoke,
+    }: {
+      grantId: string;
+      reason: string;
+      alsoRevoke?: boolean;
+    }) => {
+      await api.post(`/grants/${grantId}/flag-dispute`, { reason, alsoRevoke });
     },
-    onSuccess: () => {
-      toast.warning('Dispute Filed Successfully', {
-        description: 'The doctor\'s employing hospital administration has been notified for disciplinary peer review.',
-      });
+    onSuccess: (_, variables) => {
+      if (variables.alsoRevoke) {
+        toast.error('Dispute Filed & Access Terminated', {
+          description: "Doctor access severed immediately and host hospital administration notified for disciplinary review.",
+        });
+      } else {
+        toast.warning('Dispute Filed Successfully', {
+          description: "The doctor's employing hospital administration has been notified for disciplinary peer review.",
+        });
+      }
       setSelectedGrantForDispute(null);
       setDisputeReason('');
+      setDisputeAlsoRevoke(true);
       queryClient.invalidateQueries({ queryKey: ['patientGrants'] });
     },
     onError: (err: any) => {
@@ -60,9 +81,30 @@ export const PatientSecurityAuditView: React.FC = () => {
     },
   });
 
+  const revokeMutation = useMutation({
+    mutationFn: async ({ grantId, reason }: { grantId: string; reason: string }) => {
+      await api.post(`/grants/${grantId}/revoke`, { reason });
+    },
+    onSuccess: () => {
+      toast.error('Emergency Access Terminated', {
+        description: 'Doctor access has been severed immediately. Records are now re-locked.',
+      });
+      setSelectedGrantForRevocation(null);
+      setRevocationReason('');
+      queryClient.invalidateQueries({ queryKey: ['patientGrants'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to revoke access', {
+        description: err.response?.data?.message || 'Server error',
+      });
+    },
+  });
+
   const allGrants = data?.grants || [];
-  // Filter for break-glass events or grants flagged as disputed
-  const breakGlassEvents = allGrants.filter((g) => g.isBreakGlass || g.patientConsent?.isDisputed);
+  // Filter for break-glass events or grants flagged as disputed or revoked
+  const breakGlassEvents = allGrants.filter(
+    (g) => g.isBreakGlass || g.patientConsent?.isDisputed || g.status === 'REVOKED'
+  );
 
   const handleDisputeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +115,16 @@ export const PatientSecurityAuditView: React.FC = () => {
     disputeMutation.mutate({
       grantId: selectedGrantForDispute.id,
       reason: disputeReason.trim(),
+      alsoRevoke: disputeAlsoRevoke,
+    });
+  };
+
+  const handleRevocationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedGrantForRevocation) return;
+    revokeMutation.mutate({
+      grantId: selectedGrantForRevocation.id,
+      reason: revocationReason.trim() || 'Revoked by patient: emergency conditions not verified.',
     });
   };
 
@@ -118,7 +170,11 @@ export const PatientSecurityAuditView: React.FC = () => {
               timeStyle: 'short',
             });
 
+            const now = new Date();
             const isDisputed = grant.patientConsent?.isDisputed;
+            const isRevoked = grant.status === 'REVOKED' || !!grant.revokedAt;
+            const isExpired = grant.status === 'APPROVED' && !!grant.expiresAt && new Date(grant.expiresAt) <= now;
+            const isActive = grant.status === 'APPROVED' && !isRevoked && !isExpired;
 
             return (
               <Card key={grant.id} className="border-border/60 bg-card/60 shadow-xs">
@@ -130,9 +186,18 @@ export const PatientSecurityAuditView: React.FC = () => {
                         Emergency Break-Glass Override
                       </Badge>
 
-                      {isDisputed ? (
+                      {isRevoked ? (
+                        <Badge variant="outline" className="text-xs bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/40 font-semibold gap-1">
+                          <Lock className="size-3" />
+                          <span>Access Severed & Re-Locked</span>
+                        </Badge>
+                      ) : isDisputed ? (
                         <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/40 font-semibold">
                           🚨 Dispute Filed (Under Peer Review)
+                        </Badge>
+                      ) : isExpired ? (
+                        <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
+                          Expired (24h Window Closed)
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
@@ -143,17 +208,34 @@ export const PatientSecurityAuditView: React.FC = () => {
                       <span className="text-xs text-muted-foreground font-mono">{dateStr}</span>
                     </div>
 
-                    {!isDisputed && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedGrantForDispute(grant)}
-                        className="text-xs cursor-pointer text-destructive border-destructive/40 hover:bg-destructive/10 gap-1.5"
-                      >
-                        <FileWarning className="size-3.5" />
-                        <span>Flag Suspicious Access</span>
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isActive && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedGrantForRevocation(grant);
+                            setRevocationReason('Patient not in acute medical distress - emergency access unauthorized.');
+                          }}
+                          className="text-xs cursor-pointer gap-1.5 font-semibold bg-rose-600 hover:bg-rose-700 text-white"
+                        >
+                          <ShieldAlert className="size-3.5" />
+                          <span>🚨 Priority Revoke</span>
+                        </Button>
+                      )}
+
+                      {!isDisputed && !isRevoked && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedGrantForDispute(grant)}
+                          className="text-xs cursor-pointer text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/10 gap-1.5"
+                        >
+                          <FileWarning className="size-3.5" />
+                          <span>Flag Suspicious Access</span>
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Provider Details */}
@@ -186,11 +268,38 @@ export const PatientSecurityAuditView: React.FC = () => {
                     </p>
                   </div>
 
-                  {/* Dispute Details if already reported */}
-                  {isDisputed && (
+                  {/* Revoked Details */}
+                  {isRevoked && (
+                    <div className="text-xs p-2.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                      <Ban className="size-4 shrink-0" />
+                      <div>
+                        <span className="font-semibold">Access Severed (Records Locked): </span>
+                        <span>{grant.patientConsent?.disputeReason || 'Priority Revocation executed by patient.'}</span>
+                        {grant.revokedAt && (
+                          <span className="text-muted-foreground ml-2 font-mono">
+                            ({new Date(grant.revokedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dispute Details if reported without revocation */}
+                  {!isRevoked && isDisputed && (
                     <div className="text-xs p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300">
                       <span className="font-semibold">Your Dispute Reason: </span>
                       {grant.patientConsent?.disputeReason}
+                    </div>
+                  )}
+
+                  {/* Custodial Facility Quarantine Notice */}
+                  {grant.hospitalClearance?.flaggedForHostReview && (
+                    <div className="text-xs p-2.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                      <ShieldAlert className="size-4 shrink-0 text-rose-600" />
+                      <div>
+                        <span className="font-semibold">Custodial Hospital Quarantine Flag: </span>
+                        <span>{grant.hospitalClearance.hostReviewNotes}</span>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -210,6 +319,74 @@ export const PatientSecurityAuditView: React.FC = () => {
           />
         )}
       </div>
+
+      {/* Priority Revocation Modal */}
+      {selectedGrantForRevocation && (
+        <Dialog
+          open={Boolean(selectedGrantForRevocation)}
+          onOpenChange={(open) => !open && setSelectedGrantForRevocation(null)}
+        >
+          <DialogContent className="w-full sm:max-w-md p-6">
+            <form onSubmit={handleRevocationSubmit} className="space-y-4">
+              <DialogHeader>
+                <div className="flex items-center gap-2 text-rose-600">
+                  <ShieldAlert className="size-5" />
+                  <DialogTitle className="text-lg font-bold">
+                    🚨 Immediate Priority Revocation
+                  </DialogTitle>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Exercise sovereign veto: Immediately terminate external physician emergency access and re-lock your medical records held by {selectedGrantForRevocation.targetHospitalName}.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Lock className="size-3.5" />
+                  <span>Immediate Technical Impact:</span>
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  Doctor access will be severed in real time. Decrypted longitudinal charts and AI clinical retrieval will be blocked immediately.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">
+                  Revocation Justification / Notes *
+                </label>
+                <Textarea
+                  value={revocationReason}
+                  onChange={(e) => setRevocationReason(e.target.value)}
+                  rows={3}
+                  className="text-xs resize-none"
+                  required
+                />
+              </div>
+
+              <DialogFooter className="pt-2 border-t border-border/60">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedGrantForRevocation(null)}
+                  disabled={revokeMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  disabled={revokeMutation.isPending}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                >
+                  {revokeMutation.isPending ? 'Terminating Access...' : 'Sever Access & Lock Records'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Dispute Modal */}
       {selectedGrantForDispute && (
@@ -242,6 +419,26 @@ export const PatientSecurityAuditView: React.FC = () => {
                 />
               </div>
 
+              {/* Simultaneous Priority Revocation Option */}
+              <div className="flex items-start gap-2.5 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10">
+                <input
+                  type="checkbox"
+                  id="disputeAlsoRevoke"
+                  checked={disputeAlsoRevoke}
+                  onChange={(e) => setDisputeAlsoRevoke(e.target.checked)}
+                  className="mt-0.5 size-4 rounded accent-destructive cursor-pointer"
+                />
+                <label htmlFor="disputeAlsoRevoke" className="text-xs text-foreground font-medium cursor-pointer space-y-0.5">
+                  <div className="font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1">
+                    <Lock className="size-3" />
+                    <span>Priority Revocation: Sever doctor access immediately</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Instantly terminates active access so the doctor cannot view your records for the remaining duration.
+                  </p>
+                </label>
+              </div>
+
               <DialogFooter className="pt-2 border-t border-border/60">
                 <Button
                   type="button"
@@ -258,7 +455,11 @@ export const PatientSecurityAuditView: React.FC = () => {
                   variant="destructive"
                   disabled={disputeMutation.isPending}
                 >
-                  {disputeMutation.isPending ? 'Submitting Dispute...' : 'Submit Incident Report'}
+                  {disputeMutation.isPending
+                    ? 'Submitting...'
+                    : disputeAlsoRevoke
+                    ? 'Dispute & Sever Access Immediately'
+                    : 'Submit Incident Report'}
                 </Button>
               </DialogFooter>
             </form>

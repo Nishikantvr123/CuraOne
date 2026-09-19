@@ -19,8 +19,18 @@ import {
   Hourglass,
   ShieldCheck,
   Key,
-  AlertTriangle
+  AlertTriangle,
+  Lock
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { PaginationControl } from '@/components/ui/pagination-control';
 import { toast } from 'sonner';
 
@@ -30,6 +40,11 @@ export const HospitalInboundGrantsView: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedFilter, setSelectedFilter] = useState<StatusFilter>('ALL');
+  const [selectedGrantForRevocation, setSelectedGrantForRevocation] = useState<GrantItem | null>(null);
+  const [revocationReason, setRevocationReason] = useState('');
+  const [selectedGrantForDispute, setSelectedGrantForDispute] = useState<GrantItem | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeAlsoRevoke, setDisputeAlsoRevoke] = useState(true);
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -59,17 +74,55 @@ export const HospitalInboundGrantsView: React.FC = () => {
     },
   });
 
-  // Dispute / Host Hospital Escalation mutation
-  const flagDisputeMutation = useMutation({
-    mutationFn: async (grantId: string) => {
-      await api.post(`/grants/${grantId}/flag-dispute`, {
-        reason: 'Custodial hospital compliance officer flagged emergency break-glass for host medical staff peer review.',
-      });
+  // Priority Revocation mutation (Instant Custodial Kill-Switch)
+  const revokeMutation = useMutation({
+    mutationFn: async ({ grantId, reason }: { grantId: string; reason: string }) => {
+      await api.post(`/grants/${grantId}/revoke`, { reason });
     },
     onSuccess: () => {
-      toast.warning('Incident Escalate to Host Facility', {
-        description: 'Host hospital admin has been notified to audit the requesting physician credentials.',
+      toast.error('Custodial Disclosure Terminated', {
+        description: 'Vault records re-locked. External doctor access severed immediately.',
       });
+      setSelectedGrantForRevocation(null);
+      setRevocationReason('');
+      queryClient.invalidateQueries({ queryKey: ['hospitalGrants'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to revoke disclosure', {
+        description: err.response?.data?.message || 'Server error',
+      });
+    },
+  });
+
+  // Dispute / Host Hospital Escalation mutation
+  const flagDisputeMutation = useMutation({
+    mutationFn: async ({
+      grantId,
+      reason,
+      alsoRevoke,
+    }: {
+      grantId: string;
+      reason: string;
+      alsoRevoke?: boolean;
+    }) => {
+      await api.post(`/grants/${grantId}/flag-dispute`, {
+        reason,
+        alsoRevoke,
+      });
+    },
+    onSuccess: (_, variables) => {
+      if (variables.alsoRevoke) {
+        toast.error('Incident Flagged & Disclosure Terminated', {
+          description: 'Host hospital notified and records quarantined in your custodial vault.',
+        });
+      } else {
+        toast.warning('Incident Escalated to Host Facility', {
+          description: 'Host hospital admin has been notified to audit the requesting physician credentials.',
+        });
+      }
+      setSelectedGrantForDispute(null);
+      setDisputeReason('');
+      setDisputeAlsoRevoke(true);
       queryClient.invalidateQueries({ queryKey: ['hospitalGrants'] });
     },
     onError: (err: any) => {
@@ -231,7 +284,9 @@ export const HospitalInboundGrantsView: React.FC = () => {
               year: 'numeric',
             });
 
+            const isRevoked = grant.status === 'REVOKED' || !!grant.revokedAt;
             const isExpired = grant.status === 'APPROVED' && grant.expiresAt && new Date(grant.expiresAt) <= now;
+            const isActive = grant.status === 'APPROVED' && !isRevoked && !isExpired;
             const patientConsentStatus = grant.patientConsent?.status || 'PENDING';
             const hospitalClearanceStatus = grant.hospitalClearance?.status || 'PENDING';
             const isFlaggedForReview = grant.hospitalClearance?.flaggedForHostReview;
@@ -247,7 +302,7 @@ export const HospitalInboundGrantsView: React.FC = () => {
                           Pending Institutional Dual-Key
                         </Badge>
                       )}
-                      {grant.status === 'APPROVED' && !isExpired && (
+                      {isActive && (
                         <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-semibold">
                           <CheckCircle2 className="size-3" />
                           Active Disclosure Authorized
@@ -265,10 +320,10 @@ export const HospitalInboundGrantsView: React.FC = () => {
                           Declined
                         </Badge>
                       )}
-                      {grant.status === 'REVOKED' && (
-                        <Badge variant="outline" className="gap-1 bg-muted text-muted-foreground border-border text-xs">
-                          <Ban className="size-3" />
-                          Revoked
+                      {isRevoked && (
+                        <Badge variant="outline" className="gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/40 text-xs font-semibold">
+                          <Lock className="size-3" />
+                          Custodial Disclosure Revoked (Vault Locked)
                         </Badge>
                       )}
 
@@ -280,13 +335,20 @@ export const HospitalInboundGrantsView: React.FC = () => {
                         </Badge>
                       )}
 
+                      {/* Patient Disputed Notice Badge */}
+                      {grant.patientConsent?.isDisputed && (
+                        <Badge variant="destructive" className="gap-1 text-[11px] font-bold animate-pulse">
+                          🚨 Disputed by Patient
+                        </Badge>
+                      )}
+
                       <span className="text-xs text-muted-foreground font-mono">
                         Requested on {createdDate}
                       </span>
                     </div>
 
                     {/* Custodial Action Controls */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {hospitalClearanceStatus === 'PENDING' && grant.status === 'PENDING' && (
                         <>
                           <Button
@@ -312,14 +374,37 @@ export const HospitalInboundGrantsView: React.FC = () => {
                         </>
                       )}
 
+                      {/* Priority Revocation / Instant Kill-Switch */}
+                      {isActive && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedGrantForRevocation(grant);
+                            setRevocationReason(
+                              grant.isBreakGlass
+                                ? 'Custodial compliance quarantine: unverified emergency override rejected.'
+                                : 'Institutional clearance revoked by custodial medical center.'
+                            );
+                          }}
+                          className="text-xs cursor-pointer gap-1.5 font-semibold bg-rose-600 hover:bg-rose-700 text-white"
+                        >
+                          <ShieldAlert className="size-3.5" />
+                          <span>🚨 Priority Revoke Disclosure</span>
+                        </Button>
+                      )}
+
                       {/* Break-Glass Peer Review Flag */}
                       {grant.isBreakGlass && !isFlaggedForReview && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => flagDisputeMutation.mutate(grant.id)}
+                          onClick={() => {
+                            setSelectedGrantForDispute(grant);
+                            setDisputeReason('Custodial compliance review: emergency break-glass flagged for host facility staff investigation.');
+                          }}
                           disabled={flagDisputeMutation.isPending}
-                          className="text-xs cursor-pointer text-amber-600 border-amber-500/40 hover:bg-amber-500/10 gap-1.5"
+                          className="text-xs cursor-pointer text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/10 gap-1.5"
                         >
                           <AlertTriangle className="size-3.5" />
                           <span>Flag for Host Peer Review</span>
@@ -394,6 +479,30 @@ export const HospitalInboundGrantsView: React.FC = () => {
                     <span className="text-muted-foreground">({grant.patientEmail})</span>
                   </div>
 
+                  {/* Patient Dispute Notice */}
+                  {grant.patientConsent?.isDisputed && (
+                    <div className="text-xs p-2.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-200 flex items-start gap-2">
+                      <AlertTriangle className="size-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Patient Sovereign Dispute Filed: </span>
+                        <span>{grant.patientConsent.disputeReason}</span>
+                        {grant.patientConsent.disputedAt && (
+                          <span className="text-muted-foreground ml-2 font-mono">
+                            ({new Date(grant.patientConsent.disputedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Review Notes if Present */}
+                  {grant.hospitalClearance?.hostReviewNotes && (
+                    <div className="text-xs p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200">
+                      <span className="font-semibold">Institutional Review Audit: </span>
+                      <span>{grant.hospitalClearance.hostReviewNotes}</span>
+                    </div>
+                  )}
+
                   {/* Stated Purpose */}
                   <div className="text-xs p-3 rounded-md bg-muted/30 border border-border/40 text-foreground">
                     <span className="font-semibold text-muted-foreground">Stated Purpose for Access: </span>
@@ -416,6 +525,176 @@ export const HospitalInboundGrantsView: React.FC = () => {
           />
         )}
       </div>
+
+      {/* Custodial Priority Revocation Modal */}
+      {selectedGrantForRevocation && (
+        <Dialog
+          open={Boolean(selectedGrantForRevocation)}
+          onOpenChange={(open) => !open && setSelectedGrantForRevocation(null)}
+        >
+          <DialogContent className="w-full sm:max-w-md p-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedGrantForRevocation) return;
+                revokeMutation.mutate({
+                  grantId: selectedGrantForRevocation.id,
+                  reason: revocationReason.trim() || 'Custodial compliance quarantine.',
+                });
+              }}
+              className="space-y-4"
+            >
+              <DialogHeader>
+                <div className="flex items-center gap-2 text-rose-600">
+                  <ShieldAlert className="size-5" />
+                  <DialogTitle className="text-lg font-bold">
+                    🚨 Immediate Custodial Revocation
+                  </DialogTitle>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  As the custodial data trustee for {selectedGrantForRevocation.targetHospitalName}, terminating this disclosure immediately closes vault access to external physician {selectedGrantForRevocation.requestingDoctorName || 'attending doctor'}.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-xs text-rose-800 dark:text-rose-200 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Lock className="size-3.5" />
+                  <span>Vault Quarantine Enforcement:</span>
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  Longitudinal records held in your node will be immediately re-locked. Any active semantic retrieval sessions will drop these records from the doctor's query context.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">
+                  Custodial Revocation Reason *
+                </label>
+                <Textarea
+                  value={revocationReason}
+                  onChange={(e) => setRevocationReason(e.target.value)}
+                  rows={3}
+                  className="text-xs resize-none"
+                  required
+                />
+              </div>
+
+              <DialogFooter className="pt-2 border-t border-border/60">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedGrantForRevocation(null)}
+                  disabled={revokeMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  disabled={revokeMutation.isPending}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                >
+                  {revokeMutation.isPending ? 'Terminating Disclosure...' : 'Terminate Disclosure & Lock Vault'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Custodial Flag for Peer Review Modal */}
+      {selectedGrantForDispute && (
+        <Dialog
+          open={Boolean(selectedGrantForDispute)}
+          onOpenChange={(open) => !open && setSelectedGrantForDispute(null)}
+        >
+          <DialogContent className="w-full sm:max-w-md p-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedGrantForDispute) return;
+                flagDisputeMutation.mutate({
+                  grantId: selectedGrantForDispute.id,
+                  reason: disputeReason.trim() || 'Custodial compliance officer flagged emergency override.',
+                  alsoRevoke: disputeAlsoRevoke,
+                });
+              }}
+              className="space-y-4"
+            >
+              <DialogHeader>
+                <div className="flex items-center gap-2 text-amber-600">
+                  <AlertTriangle className="size-5" />
+                  <DialogTitle className="text-lg font-bold">
+                    Flag for Host Facility Peer Review
+                  </DialogTitle>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Formally notify {selectedGrantForDispute.requestingHospitalName} administration to audit attending clinician {selectedGrantForDispute.requestingDoctorName || 'doctor'} for potential emergency override abuse.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">
+                  Compliance Audit Notes *
+                </label>
+                <Textarea
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                  rows={3}
+                  className="text-xs resize-none"
+                  required
+                />
+              </div>
+
+              {/* Simultaneous Custodial Revocation Option */}
+              <div className="flex items-start gap-2.5 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10">
+                <input
+                  type="checkbox"
+                  id="custodialDisputeAlsoRevoke"
+                  checked={disputeAlsoRevoke}
+                  onChange={(e) => setDisputeAlsoRevoke(e.target.checked)}
+                  className="mt-0.5 size-4 rounded accent-destructive cursor-pointer"
+                />
+                <label htmlFor="custodialDisputeAlsoRevoke" className="text-xs text-foreground font-medium cursor-pointer space-y-0.5">
+                  <div className="font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1">
+                    <Lock className="size-3" />
+                    <span>Priority Revocation: Quarantine vault records immediately</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Instantly severs external clinician access and locks custodial records held in your node.
+                  </p>
+                </label>
+              </div>
+
+              <DialogFooter className="pt-2 border-t border-border/60">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedGrantForDispute(null)}
+                  disabled={flagDisputeMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  disabled={flagDisputeMutation.isPending}
+                >
+                  {flagDisputeMutation.isPending
+                    ? 'Submitting...'
+                    : disputeAlsoRevoke
+                    ? 'Flag & Quarantine Vault Immediately'
+                    : 'Dispatch Host Review Notice'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

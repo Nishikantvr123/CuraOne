@@ -536,8 +536,13 @@ export async function respondToHospitalClearance(
 
 /**
  * 6. Revoke an active grant (Patient, Doctor, or Hospital)
+ * Supports priority emergency revocation with audit logging & disciplinary alerts
  */
-export async function revokeAccessRequest(requestId: string, user: AuthUserPayload) {
+export async function revokeAccessRequest(
+  requestId: string,
+  user: AuthUserPayload,
+  reason?: string
+) {
   const [reqRecord] = await db
     .select()
     .from(accessRequests)
@@ -569,14 +574,47 @@ export async function revokeAccessRequest(requestId: string, user: AuthUserPaylo
     return reqRecord;
   }
 
+  const now = new Date();
+
   const [revoked] = await db
     .update(accessRequests)
     .set({
       status: 'REVOKED',
-      revokedAt: new Date(),
+      revokedAt: now,
     })
     .where(eq(accessRequests.id, requestId))
     .returning();
+
+  // If this is a priority revocation by Patient or Custodial Hospital, update consents/clearances
+  if (user.role === 'PATIENT') {
+    const defaultReason = reason || 'Priority Revocation executed by patient: emergency access severed.';
+    await db
+      .update(patientConsents)
+      .set({
+        isDisputed: true,
+        disputeReason: defaultReason,
+        disputedAt: now,
+      })
+      .where(eq(patientConsents.requestId, requestId));
+
+    await db
+      .update(hospitalClearances)
+      .set({
+        flaggedForHostReview: true,
+        hostReviewNotes: `Priority Revocation (Patient): ${defaultReason}`,
+      })
+      .where(eq(hospitalClearances.requestId, requestId));
+  } else if (user.role === 'HOSPITAL' && reqRecord.targetHospitalId === user.id) {
+    const defaultReason = reason || 'Priority Revocation executed by custodial hospital: access quarantined.';
+    await db
+      .update(hospitalClearances)
+      .set({
+        status: 'REJECTED',
+        flaggedForHostReview: true,
+        hostReviewNotes: `Priority Revocation (Target Custodian): ${defaultReason}`,
+      })
+      .where(eq(hospitalClearances.requestId, requestId));
+  }
 
   return revoked;
 }
@@ -588,7 +626,8 @@ export async function revokeAccessRequest(requestId: string, user: AuthUserPaylo
 export async function flagDisputeIncident(
   requestId: string,
   user: AuthUserPayload,
-  reason: string
+  reason: string,
+  alsoRevoke?: boolean
 ) {
   const [reqRecord] = await db
     .select()
@@ -648,7 +687,20 @@ export async function flagDisputeIncident(
     throw err;
   }
 
-  return { message: 'Incident flagged for bilateral host hospital peer review', requestId };
+  // If immediate priority revocation is requested alongside the dispute flag
+  let revokedGrant = null;
+  if (alsoRevoke && reqRecord.status !== 'REVOKED') {
+    revokedGrant = await revokeAccessRequest(requestId, user, reason);
+  }
+
+  return {
+    message: alsoRevoke
+      ? 'Incident flagged and access grant revoked immediately. Records are now locked.'
+      : 'Incident flagged for bilateral host hospital peer review',
+    requestId,
+    isRevoked: Boolean(alsoRevoke || reqRecord.status === 'REVOKED'),
+    grant: revokedGrant,
+  };
 }
 
 /**

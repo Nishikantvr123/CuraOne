@@ -43,7 +43,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   if (!user) return null;
 
   return (
-    <aside className="w-72 shrink-0 border-r border-border/60 bg-background/50 flex flex-col justify-between p-4 min-h-[calc(100vh-4rem)]">
+    <aside className="w-72 shrink-0 border-r border-border/60 bg-background/50 flex flex-col justify-between p-4 h-full overflow-y-auto">
       <div className="space-y-6">
         {/* 1. Root Jurisdiction Card */}
         <div className="rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-3">

@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PaginationControl } from '@/components/ui/pagination-control';
 import { 
-  ShieldCheck, 
   Clock, 
   CheckCircle2, 
   XCircle, 
@@ -17,7 +16,8 @@ import {
   Loader2,
   ArrowRight,
   AlertTriangle,
-  Key
+  Key,
+  ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -216,6 +216,26 @@ export const DoctorGrantsView: React.FC<DoctorGrantsViewProps> = ({ onSelectPati
                     <span className="font-semibold text-muted-foreground">Justification: </span>
                     {grant.purpose}
                   </div>
+
+                  {grant.patientConsent?.isDisputed && (
+                    <div className="text-xs p-2.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive flex items-center gap-2">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <div>
+                        <span className="font-semibold">Access Severed / Disputed by Patient: </span>
+                        <span>{grant.patientConsent.disputeReason}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {grant.hospitalClearance?.hostReviewNotes && (
+                    <div className="text-xs p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <div>
+                        <span className="font-semibold">Custodial Review Notice: </span>
+                        <span>{grant.hospitalClearance.hostReviewNotes}</span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

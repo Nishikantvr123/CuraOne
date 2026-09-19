@@ -28,6 +28,7 @@ const hospitalClearanceSchema = z.object({
 
 const disputeIncidentSchema = z.object({
   reason: z.string().min(5, 'Dispute reason must be at least 5 characters'),
+  alsoRevoke: z.boolean().optional(),
 });
 
 /**
@@ -198,7 +199,12 @@ export async function revokeGrant(req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const revoked = await grantService.revokeAccessRequest(req.params.id as string, req.user);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : undefined;
+    const revoked = await grantService.revokeAccessRequest(
+      req.params.id as string,
+      req.user,
+      reason
+    );
     res.json({
       message: 'Access grant successfully revoked. Records are now locked.',
       grant: revoked,
@@ -222,7 +228,8 @@ export async function flagDispute(req: Request, res: Response, next: NextFunctio
     const result = await grantService.flagDisputeIncident(
       req.params.id as string,
       req.user,
-      validated.reason
+      validated.reason,
+      validated.alsoRevoke
     );
 
     res.json(result);

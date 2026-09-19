@@ -30,6 +30,7 @@ interface HospitalSidebarProps {
   onSelectView: (view: HospitalView) => void;
   pendingOutboundCount?: number;
   activeInboundCount?: number;
+  flaggedOutboundCount?: number;
 }
 
 export const HospitalSidebar: React.FC<HospitalSidebarProps> = ({
@@ -37,6 +38,7 @@ export const HospitalSidebar: React.FC<HospitalSidebarProps> = ({
   onSelectView,
   pendingOutboundCount = 0,
   activeInboundCount = 0,
+  flaggedOutboundCount = 0,
 }) => {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -48,7 +50,7 @@ export const HospitalSidebar: React.FC<HospitalSidebarProps> = ({
   const hospitalState = user.details?.state || 'MA';
 
   return (
-    <aside className="w-72 shrink-0 border-r border-border/60 bg-background/50 flex flex-col justify-between p-4 min-h-[calc(100vh-4rem)]">
+    <aside className="w-72 shrink-0 border-r border-border/60 bg-background/50 flex flex-col justify-between p-4 h-full overflow-y-auto">
       <div className="space-y-6">
         {/* 1. Institutional Node Jurisdiction */}
         <div className="rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-3">
@@ -112,11 +114,18 @@ export const HospitalSidebar: React.FC<HospitalSidebarProps> = ({
                 <Send className="size-4 text-foreground" />
                 <span>Outbound Doctor Requests</span>
               </div>
-              {pendingOutboundCount > 0 && (
-                <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
-                  {pendingOutboundCount}
-                </Badge>
-              )}
+              <div className="flex items-center gap-1.5">
+                {flaggedOutboundCount > 0 && (
+                  <Badge variant="destructive" className="text-[10px] py-0 px-1.5 font-bold animate-pulse">
+                    🚨 {flaggedOutboundCount} Flagged
+                  </Badge>
+                )}
+                {pendingOutboundCount > 0 && (
+                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                    {pendingOutboundCount}
+                  </Badge>
+                )}
+              </div>
             </button>
           </div>
 

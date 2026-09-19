@@ -33,9 +33,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/20">
+    <div className="flex h-screen flex-col overflow-hidden bg-muted/20">
       <Navbar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <Outlet />
       </div>
     </div>

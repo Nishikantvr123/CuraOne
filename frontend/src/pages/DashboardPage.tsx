@@ -92,6 +92,11 @@ export const DashboardPage: React.FC = () => {
   const activeInboundCount = hospitalGrantsData?.grants?.filter(
     (g) => g.targetHospitalId === currentHospitalId && g.status === 'APPROVED'
   ).length || 0;
+  const flaggedOutboundCount = hospitalGrantsData?.grants?.filter(
+    (g) =>
+      g.requestingHospitalId === currentHospitalId &&
+      (g.patientConsent?.isDisputed || g.hospitalClearance?.flaggedForHostReview)
+  ).length || 0;
 
   const pendingPatientConsentsCount =
     patientGrantsData?.grants?.filter(
@@ -111,7 +116,7 @@ export const DashboardPage: React.FC = () => {
   // 1. DOCTOR WORKSTATION LAYOUT
   if (user.role === 'DOCTOR') {
     return (
-      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+      <div className="flex flex-1 h-full min-h-0 overflow-hidden">
         <DoctorSidebar
           activeView={sidebarView}
           onSelectView={(view) => {
@@ -121,7 +126,7 @@ export const DashboardPage: React.FC = () => {
           pendingGrantsCount={pendingGrantsCount}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+        <main className="flex-1 h-full p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
           {sidebarView === 'patients' && (
             selectedPatientId ? (
               <PatientTimelineView
@@ -209,15 +214,16 @@ export const DashboardPage: React.FC = () => {
   // 2. HOSPITAL WORKSTATION LAYOUT
   if (user.role === 'HOSPITAL') {
     return (
-      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+      <div className="flex flex-1 h-full min-h-0 overflow-hidden">
         <HospitalSidebar
           activeView={hospitalView}
           onSelectView={setHospitalView}
           pendingOutboundCount={pendingOutboundCount}
           activeInboundCount={activeInboundCount}
+          flaggedOutboundCount={flaggedOutboundCount}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+        <main className="flex-1 h-full p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
           {hospitalView === 'doctors' && <HospitalDoctorsView />}
           {hospitalView === 'outbound' && <HospitalOutboundGrantsView />}
           {hospitalView === 'inbound' && <HospitalInboundGrantsView />}
@@ -230,7 +236,7 @@ export const DashboardPage: React.FC = () => {
   // 3. PATIENT SOVEREIGN IDENTITY & CONSENT PORTAL (VERTICAL SLICE 3)
   if (user.role === 'PATIENT') {
     return (
-      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+      <div className="flex flex-1 h-full min-h-0 overflow-hidden">
         <PatientSidebar
           activeTab={patientTab}
           onTabChange={setPatientTab}
@@ -238,7 +244,7 @@ export const DashboardPage: React.FC = () => {
           auditAlertCount={patientAuditAlertCount}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+        <main className="flex-1 h-full p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
           {patientTab === 'timeline' && <PatientSovereignTimelineView />}
           {patientTab === 'consent' && <PatientConsentInboxView />}
           {patientTab === 'audit' && <PatientSecurityAuditView />}
@@ -249,7 +255,7 @@ export const DashboardPage: React.FC = () => {
 
   // 4. SYSTEM ADMIN WORKSTATION LAYOUT
   return (
-    <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+    <div className="flex flex-1 h-full min-h-0 overflow-hidden">
       <AdminSidebar
         activeTab={adminTab}
         onSelectTab={setAdminTab}
@@ -257,7 +263,7 @@ export const DashboardPage: React.FC = () => {
         disputedCount={adminDisputedCount}
       />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
+      <main className="flex-1 h-full p-4 sm:p-6 lg:p-8 overflow-y-auto bg-background/50">
         {adminTab === 'hospitals' && <AdminHospitalsView />}
         {adminTab === 'audit' && <AdminAuditView />}
       </main>

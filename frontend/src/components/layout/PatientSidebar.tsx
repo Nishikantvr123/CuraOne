@@ -40,7 +40,7 @@ export const PatientSidebar: React.FC<PatientSidebarProps> = ({
   const { theme, setTheme } = useTheme();
 
   return (
-    <aside className="w-full md:w-64 shrink-0 flex flex-col justify-between border-b md:border-b-0 md:border-r border-border/80 bg-sidebar p-4 gap-6">
+    <aside className="w-full md:w-64 shrink-0 flex flex-col justify-between border-b md:border-b-0 md:border-r border-border/80 bg-sidebar p-4 gap-6 h-full overflow-y-auto">
       <div className="space-y-6">
         {/* Patient Sovereign Identity Card */}
         <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2.5 shadow-xs">
